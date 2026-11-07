@@ -9,7 +9,7 @@ import { useLibrary } from '../useLibrary';
 import { usePrefs } from '../prefs';
 import { BottomNav } from './BottomNav';
 import { HomeTab } from './HomeTab';
-import { BrowseTab } from './BrowseTab';
+import { DiscoverTab } from './DiscoverTab';
 import { ListTab } from './ListTab';
 import { MoreTab } from './MoreTab';
 import { ExtDetail } from './ExtDetail';
@@ -91,8 +91,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   return (
     <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100" style={{ WebkitOverflowScrolling: 'touch' }}>
       {tab === 'home' && <HomeTab api={api} prefs={prefs} scanning={lib.scanning} progress={lib.progress} />}
-      {tab === 'movies' && <BrowseTab api={api} kind="movie" />}
-      {tab === 'series' && <BrowseTab api={api} kind="series" />}
+      {tab === 'discover' && <DiscoverTab api={api} />}
       {tab === 'list' && <ListTab api={api} />}
       {tab === 'more' && (
         <MoreTab

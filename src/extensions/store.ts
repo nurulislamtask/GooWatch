@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ExtManifest, InstalledExt } from './types';
 import { getJson } from './http';
+import { loadNuvioRepo, nuvioBaseCandidates } from './nuvio';
 
 const KEY = 'goowatch_extensions_v1';
 
@@ -61,16 +62,74 @@ export async function fetchManifest(base: string): Promise<ExtManifest> {
   return m;
 }
 
+function looksLikeCloudStream(j: any): boolean {
+  if (Array.isArray(j)) return j.some((x) => x && (x.internalName || /\.cs3$/i.test(String(x.url || ''))));
+  return !!(j && (j.pluginLists || j.manifestVersion));
+}
+
+/** Installs a Stremio add-on (manifest.json) or a Nuvio provider repository, from whatever address the user pastes. */
 export async function installExtension(input: string, builtin = false): Promise<InstalledExt> {
-  const base = normalizeBase(input);
-  const manifest = await fetchManifest(base);
+  const raw = input.trim();
+  if (!raw) throw new Error('Paste an extension address');
   const list = load();
-  const i = list.findIndex((e) => e.base === base || e.manifest.id === manifest.id);
-  const ext: InstalledExt = { base, manifest, enabled: true, builtin };
+
+  // 1) Nuvio repository (GitHub page / raw folder / manifest.json with "scrapers")
+  const isGithubPage = /^https?:\/\/github\.com\//i.test(raw);
+  if (!/^stremio:\/\//i.test(raw)) {
+    for (const cand of nuvioBaseCandidates(raw)) {
+      const repo = await loadNuvioRepo(cand);
+      if (repo) {
+        const ext: InstalledExt = {
+          kind: 'nuvio',
+          base: cand,
+          manifest: { id: cand, name: repo.name, description: `${repo.scrapers.length} providers`, resources: ['stream'] },
+          scrapers: repo.scrapers,
+          enabled: true,
+          builtin,
+        };
+        const i = list.findIndex((e) => e.base === cand);
+        if (i >= 0) list[i] = { ...ext, scrapers: ext.scrapers!.map((s) => ({ ...s, userEnabled: list[i].scrapers?.find((o) => o.id === s.id)?.userEnabled ?? s.userEnabled })) };
+        else list.push(ext);
+        save();
+        return ext;
+      }
+    }
+    if (isGithubPage) throw new Error('No provider repository (manifest.json with "scrapers") found in this GitHub repo');
+  }
+
+  // 2) Stremio add-on
+  const base = normalizeBase(raw);
+  let manifest: ExtManifest | null = null;
+  let probe: any = null;
+  try {
+    probe = await getJson(`${base}/manifest.json`, 0, 12000);
+  } catch {
+    try {
+      probe = await getJson(raw.replace(/^stremio:\/\//i, 'https://'), 0, 12000);
+    } catch (e: any) {
+      throw new Error(`Could not open this address (${e?.message || 'network error'})`);
+    }
+  }
+  if (looksLikeCloudStream(probe)) {
+    throw new Error(
+      'This is a CloudStream repository. CloudStream plugins (.cs3) are native Android code and cannot run inside GooWatch. Use a Stremio add-on or a Nuvio provider repository instead.'
+    );
+  }
+  if (probe && probe.id && probe.name) manifest = probe as ExtManifest;
+  if (!manifest) throw new Error('This address is not a Stremio add-on or a Nuvio provider repository');
+  const i = list.findIndex((e) => e.base === base || e.manifest.id === manifest!.id);
+  const ext: InstalledExt = { kind: 'stremio', base, manifest, enabled: true, builtin };
   if (i >= 0) list[i] = { ...ext, enabled: list[i].enabled };
   else list.push(ext);
   save();
   return ext;
+}
+
+export function setScraperEnabled(base: string, id: string, on: boolean) {
+  const e = load().find((x) => x.base === base);
+  const s = e?.scrapers?.find((x) => x.id === id);
+  if (s) s.userEnabled = on;
+  save();
 }
 
 export function removeExtension(base: string) {

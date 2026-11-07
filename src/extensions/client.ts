@@ -1,5 +1,6 @@
 import { ExtCatalog, ExtManifest, ExtMeta, ExtPreview, ExtStream, InstalledExt, ResolvedStream } from './types';
 import { getJson } from './http';
+import { imdbToTmdb, NuvioStream, runScraper } from './nuvio';
 
 function resourceEntry(m: ExtManifest, resource: string) {
   return (m.resources || []).find((r) => (typeof r === 'string' ? r === resource : r.name === resource));
@@ -47,8 +48,21 @@ function toPreview(o: any, ext: InstalledExt, type: string): ExtPreview | null {
   };
 }
 
-export async function fetchCatalog(ext: InstalledExt, c: ExtCatalog, search?: string): Promise<ExtPreview[]> {
-  const extra = search ? `/search=${encodeURIComponent(search)}` : '';
+export function catalogGenres(c: ExtCatalog): string[] {
+  return (c.extra || []).find((e) => e.name === 'genre')?.options || [];
+}
+
+export async function fetchCatalog(
+  ext: InstalledExt,
+  c: ExtCatalog,
+  search?: string,
+  opts?: { genre?: string; skip?: number }
+): Promise<ExtPreview[]> {
+  const parts: string[] = [];
+  if (search) parts.push(`search=${encodeURIComponent(search)}`);
+  if (opts?.genre) parts.push(`genre=${encodeURIComponent(opts.genre)}`);
+  if (opts?.skip) parts.push(`skip=${opts.skip}`);
+  const extra = parts.length ? `/${parts.join('&')}` : '';
   const r = await getJson<{ metas?: any[] }>(`${ext.base}/catalog/${c.type}/${encodeURIComponent(c.id)}${extra}.json`);
   return (r.metas || []).map((o) => toPreview(o, ext, c.type)).filter(Boolean) as ExtPreview[];
 }
@@ -103,30 +117,109 @@ function resolve(ext: InstalledExt, s: ExtStream, i: number): ResolvedStream {
   return { ...base, reason: 'Unsupported stream type' };
 }
 
-/** Asks every enabled extension for streams; `onBatch` is called as each one answers. */
+function qualityOf(st: NuvioStream): string {
+  return `${st.quality || ''} ${st.title || ''} ${st.name || ''}`;
+}
+
+function resolveNuvio(ext: InstalledExt, scName: string, st: NuvioStream, i: number): ResolvedStream | null {
+  if (!st || !st.url || !/^https?:\/\//i.test(st.url)) return null;
+  const h = st.headers || {};
+  const get = (k: string) => Object.entries(h).find(([x]) => x.toLowerCase() === k)?.[1];
+  const label = [st.provider || st.name || scName, st.quality].filter(Boolean).join(' · ');
+  return {
+    key: `${ext.base}#${scName}#${i}`,
+    addon: `${ext.manifest.name} / ${scName}`,
+    label: label || scName,
+    detail: [st.title, st.size].filter(Boolean).join(' · '),
+    playable: true,
+    url: st.url,
+    referer: get('referer'),
+    userAgent: get('user-agent'),
+    subtitles: [],
+    score: qualityScore(qualityOf(st)) + 100,
+  };
+}
+
+/** Asks every enabled extension / provider for streams; `onBatch` is called as each one answers. */
 export async function fetchStreams(
   exts: InstalledExt[],
   type: string,
   videoId: string,
   onBatch: (all: ResolvedStream[], pending: number) => void
 ): Promise<void> {
-  const list = exts.filter((e) => e.enabled && supports(e.manifest, 'stream', type, videoId));
-  const all: ResolvedStream[] = [];
-  let pending = list.length;
-  if (pending === 0) return onBatch([], 0);
-  await Promise.all(
-    list.map(async (e) => {
-      try {
-        const r = await getJson<{ streams?: ExtStream[] }>(`${e.base}/stream/${type}/${encodeURIComponent(videoId)}.json`, 2 * 60 * 1000, 20000);
-        (r.streams || []).forEach((s, i) => all.push(resolve(e, s, i)));
-      } catch {
-        /* this extension did not answer */
-      } finally {
-        pending--;
-        onBatch([...all].sort((a, b) => b.score - a.score), pending);
+  const stremio = exts.filter((e) => e.enabled && e.kind !== 'nuvio' && supports(e.manifest, 'stream', type, videoId));
+  // Nuvio providers need the TMDB id of an IMDb title
+  const m = videoId.match(/^(tt\d+)(?::(\d+):(\d+))?/);
+  const nuvio: { ext: InstalledExt; sc: NonNullable<InstalledExt['scrapers']>[number] }[] = [];
+  const kind: 'movie' | 'tv' = type === 'movie' ? 'movie' : 'tv';
+  if (m) {
+    for (const e of exts) {
+      if (!e.enabled || e.kind !== 'nuvio') continue;
+      for (const sc of e.scrapers || []) {
+        if (sc.userEnabled === false) continue;
+        const types = (sc.supportedTypes || ['movie', 'tv']).map((t) => (t === 'series' ? 'tv' : t));
+        if (types.includes(kind)) nuvio.push({ ext: e, sc });
       }
-    })
-  );
+    }
+  }
+  const all: ResolvedStream[] = [];
+  let pending = stremio.length + nuvio.length;
+  if (pending === 0) return onBatch([], 0);
+  const push = () => onBatch([...all].sort((a, b) => b.score - a.score), pending);
+
+  const jobs: Promise<void>[] = stremio.map(async (e) => {
+    try {
+      const r = await getJson<{ streams?: ExtStream[] }>(`${e.base}/stream/${type}/${encodeURIComponent(videoId)}.json`, 2 * 60 * 1000, 20000);
+      (r.streams || []).forEach((s, i) => all.push(resolve(e, s, i)));
+    } catch {
+      /* this extension did not answer */
+    } finally {
+      pending--;
+      push();
+    }
+  });
+
+  if (nuvio.length) {
+    const tmdb = await imdbToTmdb(m![1], kind);
+    if (!tmdb) {
+      // no TMDB key (Settings → Extensions) or title unknown
+      all.push({
+        key: 'nuvio-needs-tmdb',
+        addon: 'Nuvio providers',
+        label: 'Provider streams need a TMDB API key',
+        detail: 'Settings → Extensions → TMDB API key (free at themoviedb.org)',
+        playable: false,
+        reason: 'Add your TMDB API key to use Nuvio providers',
+        subtitles: [],
+        score: -1,
+      });
+      pending -= nuvio.length;
+      push();
+    } else {
+      const season = m![2] ? parseInt(m![2], 10) : kind === 'tv' ? 1 : null;
+      const episode = m![3] ? parseInt(m![3], 10) : kind === 'tv' ? 1 : null;
+      let idx = 0;
+      const worker = async () => {
+        while (idx < nuvio.length) {
+          const { ext, sc } = nuvio[idx++];
+          try {
+            const res = await runScraper(ext.base, sc, tmdb, kind, season, episode);
+            res.forEach((st, i) => {
+              const r = resolveNuvio(ext, sc.name, st, i);
+              if (r) all.push(r);
+            });
+          } catch {
+            /* provider failed */
+          } finally {
+            pending--;
+            push();
+          }
+        }
+      };
+      jobs.push(worker(), worker(), worker(), worker());
+    }
+  }
+  await Promise.all(jobs);
 }
 
 export async function fetchExtSubtitles(exts: InstalledExt[], type: string, id: string): Promise<{ url: string; label: string }[]> {

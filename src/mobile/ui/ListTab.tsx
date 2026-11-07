@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { ShellApi } from './types';
 import { MobilePoster } from './MobilePoster';
+import { ExtCard } from './ExtRows';
+import { useExtSaved } from '../../extensions/library';
 
 export const ListTab: React.FC<{ api: ShellApi }> = ({ api }) => {
+  const extSaved = useExtSaved();
   const [seg, setSeg] = useState<'list' | 'history'>('list');
   const items = seg === 'list' ? api.watchlist : api.recent.map((r) => r.video);
   const seg_ = (a: boolean) =>
@@ -13,7 +16,7 @@ export const ListTab: React.FC<{ api: ShellApi }> = ({ api }) => {
         <h1 className="text-[22px] font-extrabold tracking-tight text-white">My Library</h1>
         <div className="mt-3 flex rounded-xl bg-white/[0.07] p-1">
           <button className={seg_(seg === 'list')} onClick={() => setSeg('list')}>
-            My List ({api.watchlist.length})
+            My List ({api.watchlist.length + extSaved.length})
           </button>
           <button className={seg_(seg === 'history')} onClick={() => setSeg('history')}>
             History ({api.recent.length})
@@ -21,6 +24,9 @@ export const ListTab: React.FC<{ api: ShellApi }> = ({ api }) => {
         </div>
       </div>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pt-4">
+        {seg === 'list' && extSaved.map((p) => (
+          <ExtCard key={`${p.type}:${p.id}`} item={p} onOpen={api.openExt} className="w-full" />
+        ))}
         {items.map((it) => (
           <MobilePoster
             key={it.id}
@@ -31,7 +37,7 @@ export const ListTab: React.FC<{ api: ShellApi }> = ({ api }) => {
           />
         ))}
       </div>
-      {items.length === 0 && (
+      {items.length === 0 && !(seg === 'list' && extSaved.length > 0) && (
         <p className="px-8 pt-16 text-center text-sm text-zinc-500">
           {seg === 'list' ? 'Tap the + or bookmark on any title to keep it here.' : 'Titles you watch will appear here.'}
         </p>

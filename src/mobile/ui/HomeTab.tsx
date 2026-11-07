@@ -3,6 +3,7 @@ import { Search, X } from 'lucide-react';
 import { ParsedFtpItem } from '../../utils/ftpParser';
 import { MobilePoster } from './MobilePoster';
 import { Hero } from './Hero';
+import { ExtHero } from './ExtHero';
 import { ExtRows } from './ExtRows';
 import { Row } from './Row';
 import { ShellApi } from './types';
@@ -142,6 +143,9 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
   return (
     <div className="pb-4">
       <div className="relative">
+        {hero.length === 0 ? (
+          <ExtHero onOpen={api.openExt} auto={prefs.heroAutoSlide} />
+        ) : (
         <Hero
           items={hero}
           auto={prefs.heroAutoSlide}
@@ -150,9 +154,10 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
           onDetails={api.openDetails}
           onToggleSave={api.toggleSave}
         />
+        )}
         <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-4 pb-6 pt-3">
           <span className="text-[20px] font-black tracking-tight text-white">
-            Cine<span className="text-amber-400">FTP</span>
+            Goo<span className="text-amber-400">Watch</span>
           </span>
           <button onClick={api.openSearch} aria-label="Search" className="rounded-full bg-black/40 p-2.5 backdrop-blur active:scale-90">
             <Search className="h-5 w-5 text-white" />
@@ -187,8 +192,8 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
       )}
 
       {trending.length > 0 && <Row title="Trending Now" subtitle="Changes through the day">{trending.map((i) => card(i))}</Row>}
-      {movies.length > 0 && <Row title="New Movies" onMore={() => api.goTab('movies')}>{movies.map((i) => card(i))}</Row>}
-      {series.length > 0 && <Row title="New Series" onMore={() => api.goTab('series')}>{series.map((i) => card(i))}</Row>}
+      {movies.length > 0 && <Row title="New Movies" onMore={() => api.goTab('discover')}>{movies.map((i) => card(i))}</Row>}
+      {series.length > 0 && <Row title="New Series" onMore={() => api.goTab('discover')}>{series.map((i) => card(i))}</Row>}
       {dual.length > 0 && <Row title="Dual Audio">{dual.map((i) => card(i))}</Row>}
       {sourceRows.map((r) => (
         <Row key={r.name} title={r.name}>

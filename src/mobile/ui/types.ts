@@ -3,7 +3,7 @@ import { AppSource, RecentlyPlayedEntry } from '../../types/cineftp';
 import { ExtPreview } from '../../extensions/types';
 import { EnrichedMetadata } from '../../services/ftpClient';
 
-export type Tab = 'home' | 'movies' | 'series' | 'list' | 'more';
+export type Tab = 'home' | 'discover' | 'list' | 'more';
 
 export interface ShellApi {
   library: ParsedFtpItem[];

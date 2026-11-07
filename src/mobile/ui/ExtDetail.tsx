@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, Loader2, Play, Star, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, Loader2, Play, Star, X } from 'lucide-react';
 import { ExtMeta, ExtPreview, ExtVideo, ResolvedStream } from '../../extensions/types';
 import { fetchMeta, fetchStreams } from '../../extensions/client';
 import { useExtensions } from '../../extensions/store';
+import { isExtSaved, toggleExtSaved, useExtSaved } from '../../extensions/library';
 import { ParsedFtpItem } from '../../utils/ftpParser';
 
 interface Target {
@@ -24,6 +25,8 @@ export const ExtDetail: React.FC<{
   const [target, setTarget] = useState<Target | null>(null);
   const [streams, setStreams] = useState<ResolvedStream[]>([]);
   const [pending, setPending] = useState(0);
+  useExtSaved();
+  const saved = isExtSaved(preview.id);
 
   useEffect(() => {
     let alive = true;
@@ -145,6 +148,13 @@ export const ExtDetail: React.FC<{
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-black" />}
           {episodic ? 'Play first episode' : 'Play'}
+        </button>
+        <button
+          onClick={() => toggleExtSaved({ ...preview, poster: meta?.poster || preview.poster, background: meta?.background || preview.background, name: meta?.name || preview.name })}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-2.5 text-[14px] font-semibold text-white active:scale-[0.98] md:max-w-sm"
+        >
+          {saved ? <BookmarkCheck className="h-5 w-5 text-amber-400" /> : <Bookmark className="h-5 w-5" />}
+          {saved ? 'In My List' : 'Add to My List'}
         </button>
 
         {loading && <p className="mt-4 text-sm text-zinc-500">Loading details…</p>}

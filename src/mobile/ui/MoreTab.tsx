@@ -151,7 +151,7 @@ export const MoreTab: React.FC<Props> = (p) => {
       <Section title="Library">
         <Line
           icon={<Database className="h-5 w-5" />}
-          title="Sources"
+          title="My servers (optional)"
           hint={`${p.sources.length} servers · ${p.libraryCount.toLocaleString()} titles`}
           onClick={() => setShowSources((v) => !v)}
           right={showSources ? <ChevronDown className="h-4 w-4 text-zinc-500" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}

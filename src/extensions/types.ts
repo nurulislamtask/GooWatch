@@ -25,8 +25,10 @@ export interface ExtManifest {
   catalogs?: ExtCatalog[];
 }
 export interface InstalledExt {
-  base: string; // address without /manifest.json
+  kind?: 'stremio' | 'nuvio';
+  base: string; // address without /manifest.json (nuvio: raw folder ending with /)
   manifest: ExtManifest;
+  scrapers?: import('./nuvio').NuvioScraper[];
   enabled: boolean;
   builtin?: boolean;
 }

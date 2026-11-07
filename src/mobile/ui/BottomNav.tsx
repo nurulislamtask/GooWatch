@@ -1,12 +1,11 @@
 import React from 'react';
-import { Home, Film, Tv, Bookmark, Settings } from 'lucide-react';
+import { Home, Compass, Bookmark, Settings } from 'lucide-react';
 import { Tab } from './types';
 
 const TABS: { id: Tab; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'home', label: 'Home', Icon: Home },
-  { id: 'movies', label: 'Movies', Icon: Film },
-  { id: 'series', label: 'Series', Icon: Tv },
-  { id: 'list', label: 'My List', Icon: Bookmark },
+  { id: 'discover', label: 'Discover', Icon: Compass },
+  { id: 'list', label: 'Library', Icon: Bookmark },
   { id: 'more', label: 'Settings', Icon: Settings },
 ];
 

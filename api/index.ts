@@ -2740,6 +2740,30 @@ app.get(['/api/subtitle', '/subtitle'], async (req, res) => {
 });
 
 /**
+ * API: generic HTTP relay for extensions (no CORS limits on the desktop app)
+ */
+app.post(['/api/ext/fetch', '/ext/fetch'], async (req, res) => {
+  try {
+    const { url, method = 'GET', headers = {}, body } = (req.body || {}) as any;
+    const u = new URL(String(url));
+    if (!/^https?:$/.test(u.protocol)) throw new Error('bad protocol');
+    const r = await fetch(u.href, {
+      method,
+      headers: { 'User-Agent': 'Mozilla/5.0 GooWatch', ...headers },
+      body: method === 'GET' || method === 'HEAD' ? undefined : body,
+      redirect: 'follow',
+      signal: AbortSignal.timeout(25000),
+    });
+    const text = await r.text();
+    const hdrs: Record<string, string> = {};
+    r.headers.forEach((v, k) => (hdrs[k] = v));
+    res.json({ status: r.status, url: r.url, headers: hdrs, body: text });
+  } catch (e: any) {
+    res.status(502).json({ status: 0, error: String(e?.message || e) });
+  }
+});
+
+/**
  * API: online subtitle search (OpenSubtitles REST, no key needed) for a movie / episode
  */
 app.get(['/api/subs/search', '/subs/search'], async (req, res) => {
