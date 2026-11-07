@@ -1,0 +1,13 @@
+{
+  "appId": "com.goowatch.app",
+  "appName": "GooWatch",
+  "webDir": "dist",
+  "backgroundColor": "#090A0F",
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
