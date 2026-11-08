@@ -36,14 +36,19 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <h1 className="text-[18px] font-extrabold text-white">Extensions</h1>
       </div>
 
-      <div className="mx-auto max-w-2xl px-4">
-        <p className="text-[12.5px] leading-relaxed text-zinc-400">
-          Extensions bring movies, series, anime, streams and subtitles into GooWatch. Paste the address of:
-        </p>
-        <ul className="mt-1.5 list-disc space-y-0.5 pl-5 text-[12.5px] text-zinc-400">
-          <li><span className="text-zinc-200">Stremio add-on</span> – <span className="text-zinc-300">…/manifest.json</span> or <span className="text-zinc-300">stremio://…</span></li>
-          <li><span className="text-zinc-200">Nuvio provider repository</span> – its GitHub page or raw folder address</li>
-        </ul>
+      <div className="mx-auto max-w-3xl px-4 md:px-6">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-400/20 via-orange-500/10 to-transparent p-5 ring-1 ring-amber-400/20">
+          <Puzzle className="absolute -right-4 -top-4 h-28 w-28 rotate-12 text-amber-400/10" />
+          <h2 className="text-[20px] font-extrabold text-white">Add more to GooWatch</h2>
+          <p className="mt-1 max-w-md text-[13px] leading-relaxed text-zinc-300">
+            Extensions bring movies, series, anime, streams and subtitles. Press <b>Install</b> on an add-on website and GooWatch opens by itself
+            and asks to confirm — or paste an address below.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">Stremio add-ons · stremio://</span>
+            <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">Nuvio providers · GitHub repo</span>
+          </div>
+        </div>
 
         <div className="mt-4 flex gap-2">
           <input
@@ -52,12 +57,12 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             placeholder="Add-on or provider repository address"
             inputMode="url"
             autoCapitalize="none"
-            className="min-w-0 flex-1 rounded-xl bg-white/[0.08] px-3 py-3 text-[14px] text-white outline-none placeholder:text-zinc-500"
+            className="min-w-0 flex-1 rounded-2xl bg-white/[0.07] px-4 py-3.5 text-[14px] text-white outline-none ring-1 ring-white/[0.06] placeholder:text-zinc-500 focus:ring-amber-400/50"
           />
           <button
             onClick={() => add(url)}
             disabled={busy || !url.trim()}
-            className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 text-[14px] font-bold text-black disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-2xl bg-amber-400 px-5 text-[14px] font-bold text-black active:scale-95 disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
           </button>
@@ -65,15 +70,15 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         {msg && <p className="mt-2 text-[12.5px] text-amber-300">{msg}</p>}
 
         <h2 className="mb-2 mt-6 text-[11.5px] font-bold uppercase tracking-wider text-zinc-500">Installed</h2>
-        <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl bg-[#0F121A] ring-1 ring-white/[0.05]">
+        <div className="grid gap-3 md:grid-cols-2">
           {exts.length === 0 && <p className="p-4 text-[13px] text-zinc-500">Nothing installed yet — installing the built-in ones…</p>}
           {exts.map((e) => (
-            <div key={e.base}>
-            <div className="flex items-center gap-3 p-3">
+            <div key={e.base} className={`overflow-hidden rounded-2xl bg-[#0F121A] ring-1 ${e.enabled ? 'ring-white/[0.07]' : 'opacity-60 ring-white/[0.04]'}`}>
+            <div className="flex items-center gap-3 p-3.5">
               {e.manifest.logo ? (
-                <img src={e.manifest.logo} alt="" className="h-10 w-10 shrink-0 rounded-lg bg-white/5 object-contain" />
+                <img src={e.manifest.logo} alt="" className="h-12 w-12 shrink-0 rounded-xl bg-white/5 object-contain p-0.5" />
               ) : (
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400/20 to-white/5">
                   <Puzzle className="h-5 w-5 text-zinc-400" />
                 </div>
               )}
@@ -140,14 +145,14 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         {SUGGESTED.some((s) => !have.has(s.base)) && (
           <>
             <h2 className="mb-2 mt-6 text-[11.5px] font-bold uppercase tracking-wider text-zinc-500">Suggested</h2>
-            <div className="divide-y divide-white/[0.05] overflow-hidden rounded-2xl bg-[#0F121A] ring-1 ring-white/[0.05]">
+            <div className="grid gap-3 md:grid-cols-2">
               {SUGGESTED.filter((s) => !have.has(s.base)).map((s) => (
-                <div key={s.base} className="flex items-center gap-3 p-3">
+                <div key={s.base} className="flex items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.07]">
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-white">{s.name}</p>
                     <p className="text-[11.5px] text-zinc-500">{s.hint}</p>
                   </div>
-                  <button onClick={() => add(s.base)} disabled={busy} className="rounded-lg bg-white/10 px-3 py-1.5 text-[13px] font-semibold text-white">
+                  <button onClick={() => add(s.base)} disabled={busy} className="rounded-xl bg-amber-400 px-4 py-2 text-[13px] font-bold text-black active:scale-95">
                     Install
                   </button>
                 </div>

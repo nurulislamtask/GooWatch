@@ -2,6 +2,14 @@ package com.goowatch.app;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.util.LruCache;
+import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
+import android.widget.ScrollView;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
@@ -39,6 +47,7 @@ import org.videolan.libvlc.MediaPlayer;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.Locale;
 
 /**
@@ -52,7 +61,17 @@ public class VlcPlayerActivity extends AppCompatActivity {
     private MediaPlayer mp;
     private SurfaceView surface;
     private LinearLayout topBar, bottomBar;
-    private TextView titleView, timeView, playBtn, hud, audioBtn, hwBtn, speedBtn, aspectBtn;
+    private TextView titleView, timeView, durView, playBtn, hud, audioBtn, hwBtn, speedBtn, aspectBtn, prevBtn, nextBtn;
+    private LinearLayout centerBar, panelBox;
+    private FrameLayout panelHolder;
+    private int panelSeason = 0;
+    private int requestIdx = -1;
+    private final ArrayList<String> thumbs = new ArrayList<>();
+    private final ArrayList<String> overviews = new ArrayList<>();
+    private final ArrayList<String> releases = new ArrayList<>();
+    private final ArrayList<String> epTitles = new ArrayList<>();
+    private final ArrayList<Boolean> lazy = new ArrayList<>();
+    private final LruCache<String, Bitmap> imgCache = new LruCache<>(60);
     private SeekBar seek;
     private AudioManager audio;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -107,7 +126,8 @@ public class VlcPlayerActivity extends AppCompatActivity {
                     seek.setMax((int) (lastDuration / 1000));
                     seek.setProgress((int) (lastTime / 1000));
                 }
-                timeView.setText(fmt(lastTime) + " / " + fmt(lastDuration));
+                timeView.setText(fmt(lastTime));
+                durView.setText(fmt(lastDuration));
                 playBtn.setText(mp.isPlaying() ? "❚❚" : "▶");
             }
             ui.postDelayed(this, 500);
@@ -140,6 +160,11 @@ public class VlcPlayerActivity extends AppCompatActivity {
                 JSONArray sa = o.optJSONArray("subtitles");
                 if (sa != null) for (int s = 0; s < sa.length() && s < 12; s++) subs.add(sa.getJSONObject(s).getString("url"));
                 extSubs.add(subs);
+                thumbs.add(o.optString("thumb", ""));
+                overviews.add(o.optString("overview", ""));
+                releases.add(o.optString("released", ""));
+                epTitles.add(o.optString("epTitle", ""));
+                lazy.add(o.optBoolean("lazy", false));
                 referers.add(o.optString("referer", ""));
                 agents.add(o.optString("userAgent", ""));
             }
@@ -162,54 +187,67 @@ public class VlcPlayerActivity extends AppCompatActivity {
         root.addView(surface, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        // ---- top bar
+        // ---- top bar: back, title, rotate, videos
         topBar = new LinearLayout(this);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0xCC000000, 0}));
-        topBar.setPadding(dp(14), dp(10), dp(14), dp(22));
-        TextView close = btn("✕");
+        topBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{0xDD000000, 0}));
+        topBar.setPadding(dp(20), dp(14), dp(20), dp(30));
+        TextView close = plain("\u2039", 36f);
+        close.setPadding(dp(6), 0, dp(16), dp(6));
         close.setOnClickListener(v -> finish());
         topBar.addView(close);
-        titleView = new TextView(this);
-        titleView.setTextColor(Color.WHITE);
-        titleView.setTextSize(15f);
+        titleView = plain("", 19f);
+        titleView.setTypeface(titleView.getTypeface(), android.graphics.Typeface.BOLD);
         titleView.setSingleLine(true);
         titleView.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        tlp.leftMargin = dp(10);
-        tlp.rightMargin = dp(10);
-        topBar.addView(titleView, tlp);
-        audioBtn = btn("Audio");
-        audioBtn.setOnClickListener(v -> pickTrack(true));
-        topBar.addView(audioBtn, margin());
-        TextView subBtn = btn("Subs");
-        subBtn.setOnClickListener(v -> subtitleMenu());
-        topBar.addView(subBtn, margin());
-        TextView ext = btn("Open with");
-        ext.setOnClickListener(v -> openWithOtherPlayer());
-        topBar.addView(ext, margin());
-        hwBtn = btn(hardware ? "HW" : "SW");
-        hwBtn.setOnClickListener(v -> { hardware = !hardware; hwBtn.setText(hardware ? "HW" : "SW"); reloadHere(); });
-        topBar.addView(hwBtn, margin());
-        aspectBtn = btn("Fit");
-        aspectBtn.setOnClickListener(v -> {
-            aspectMode = (aspectMode + 1) % ASPECT.length;
-            aspectBtn.setText(ASPECT[aspectMode]);
-            applyAspect();
-        });
-        topBar.addView(aspectBtn);
+        topBar.addView(titleView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView rotate = plain("\u27F3   Rotate Screen", 15f);
+        rotate.setOnClickListener(v -> rotateScreen());
+        topBar.addView(rotate, gap());
+        TextView videosBtn = plain("\u25A4   Videos", 15f);
+        videosBtn.setOnClickListener(v -> showEpisodes());
+        topBar.addView(videosBtn, gap());
         root.addView(topBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
-        // ---- bottom bar
+        // ---- centre controls
+        centerBar = new LinearLayout(this);
+        centerBar.setGravity(Gravity.CENTER);
+        prevBtn = plain("\u23EE", 30f);
+        prevBtn.setOnClickListener(v -> go(index - 1));
+        centerBar.addView(prevBtn, ctl(64));
+        TextView back10 = plain("\u21BA 10", 20f);
+        back10.setOnClickListener(v -> skip(-10000));
+        centerBar.addView(back10, ctl(72));
+        playBtn = plain("\u275A\u275A", 40f);
+        playBtn.setOnClickListener(v -> toggle());
+        centerBar.addView(playBtn, ctl(96));
+        TextView fwd10 = plain("10 \u21BB", 20f);
+        fwd10.setOnClickListener(v -> skip(10000));
+        centerBar.addView(fwd10, ctl(72));
+        nextBtn = plain("\u23ED", 30f);
+        nextBtn.setOnClickListener(v -> go(index + 1));
+        centerBar.addView(nextBtn, ctl(64));
+        root.addView(centerBar, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+
+        // ---- bottom: seek bar + actions
         bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.VERTICAL);
-        bottomBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, new int[]{0xCC000000, 0}));
-        bottomBar.setPadding(dp(16), dp(24), dp(16), dp(12));
+        bottomBar.setBackground(new GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, new int[]{0xE6000000, 0}));
+        bottomBar.setPadding(dp(22), dp(34), dp(22), dp(12));
+        LinearLayout seekRow = new LinearLayout(this);
+        seekRow.setGravity(Gravity.CENTER_VERTICAL);
+        timeView = plain("00:00", 14f);
+        timeView.setPadding(0, 0, dp(8), 0);
+        seekRow.addView(timeView);
         seek = new SeekBar(this);
+        seek.setProgressTintList(ColorStateList.valueOf(0xFFFBBF24));
+        seek.setThumbTintList(ColorStateList.valueOf(0xFFFBBF24));
+        seek.setSecondaryProgressTintList(ColorStateList.valueOf(0x66FFFFFF));
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar s, int p, boolean fromUser) {
-                if (fromUser) timeView.setText(fmt(p * 1000L) + " / " + fmt(lastDuration));
+                if (fromUser) timeView.setText(fmt(p * 1000L));
             }
             @Override public void onStartTrackingTouch(SeekBar s) { userSeeking = true; ui.removeCallbacks(hideBars); }
             @Override public void onStopTrackingTouch(SeekBar s) {
@@ -218,36 +256,36 @@ public class VlcPlayerActivity extends AppCompatActivity {
                 ui.postDelayed(hideBars, 4000);
             }
         });
-        bottomBar.addView(seek);
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView prev = btn("⏮");
-        prev.setOnClickListener(v -> go(index - 1));
-        row.addView(prev, margin());
-        TextView back = btn("↺ 10");
-        back.setOnClickListener(v -> skip(-10000));
-        row.addView(back, margin());
-        playBtn = btn("❚❚");
-        playBtn.setOnClickListener(v -> toggle());
-        row.addView(playBtn, margin());
-        TextView fwd = btn("10 ↻");
-        fwd.setOnClickListener(v -> skip(10000));
-        row.addView(fwd, margin());
-        TextView next = btn("⏭");
-        next.setOnClickListener(v -> go(index + 1));
-        row.addView(next, margin());
-        speedBtn = btn("1x");
-        speedBtn.setOnClickListener(v -> {
-            speedIdx = (speedIdx + 1) % SPEEDS.length;
-            if (mp != null) mp.setRate(SPEEDS[speedIdx]);
-            speedBtn.setText(SPEEDS[speedIdx] + "x");
+        seekRow.addView(seek, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        durView = plain("00:00", 14f);
+        durView.setPadding(dp(8), 0, 0, 0);
+        seekRow.addView(durView);
+        bottomBar.addView(seekRow);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setPadding(0, dp(6), 0, 0);
+        TextView subBtn = action("CC", "Subtitles");
+        subBtn.setOnClickListener(v -> subtitleMenu());
+        actions.addView(subBtn, actionLp());
+        audioBtn = action("\u266A", "Audio Tracks");
+        audioBtn.setOnClickListener(v -> pickTrack(true));
+        actions.addView(audioBtn, actionLp());
+        speedBtn = action("\u25D4", "Playback Speed");
+        speedBtn.setOnClickListener(v -> speedMenu());
+        actions.addView(speedBtn, actionLp());
+        aspectBtn = action("\u2922", "Video scaling");
+        aspectBtn.setOnClickListener(v -> {
+            aspectMode = (aspectMode + 1) % ASPECT.length;
+            applyAspect();
+            showHud("Video scaling: " + ASPECT[aspectMode]);
         });
-        row.addView(speedBtn, margin());
-        timeView = new TextView(this);
-        timeView.setTextColor(Color.WHITE);
-        timeView.setGravity(Gravity.END);
-        row.addView(timeView, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        bottomBar.addView(row);
+        actions.addView(aspectBtn, actionLp());
+        TextView playerBtn = action("\u25A3", "Player");
+        playerBtn.setOnClickListener(v -> playerMenu());
+        actions.addView(playerBtn, actionLp());
+        bottomBar.addView(actions);
+        hwBtn = new TextView(this); // decoder label (not shown, kept for status text)
         root.addView(bottomBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
 
@@ -263,6 +301,20 @@ public class VlcPlayerActivity extends AppCompatActivity {
         hud.setVisibility(View.GONE);
         root.addView(hud, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+
+        // ---- "Videos" side panel (seasons + episodes)
+        panelHolder = new FrameLayout(this);
+        panelHolder.setVisibility(View.GONE);
+        panelHolder.setBackgroundColor(0x66000000);
+        panelHolder.setOnClickListener(v -> hideEpisodes());
+        panelBox = new LinearLayout(this);
+        panelBox.setOrientation(LinearLayout.VERTICAL);
+        panelBox.setBackgroundColor(0xF2191824);
+        panelBox.setClickable(true);
+        int pw = Math.min(dp(440), (int) (getResources().getDisplayMetrics().widthPixels * 0.62f));
+        panelHolder.addView(panelBox, new FrameLayout.LayoutParams(pw, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END));
+        root.addView(panelHolder, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         setupGestures();
 
@@ -406,8 +458,8 @@ public class VlcPlayerActivity extends AppCompatActivity {
     private void updateAudioLabel() {
         if (mp == null) return;
         int n = realTracks(mp.getAudioTracks());
-        audioBtn.setText(n > 1 ? "Audio (" + n + ")" : "Audio");
-        if (n > 1 && !audioHint) { audioHint = true; showHud(n + " audio tracks – tap Audio to choose"); }
+        audioBtn.setText(n > 1 ? "\u266A  Audio Tracks (" + n + ")" : "\u266A  Audio Tracks");
+        if (n > 1 && !audioHint) { audioHint = true; showHud(n + " audio tracks – tap Audio Tracks to choose"); }
     }
     private boolean audioHint = false;
 
@@ -418,6 +470,12 @@ public class VlcPlayerActivity extends AppCompatActivity {
 
     private void go(int i) {
         if (i < 0 || i >= urls.size()) return;
+        if (lazy.get(i)) {
+            // this episode's stream is not known yet: hand back to the app, it finds a stream and reopens the player here
+            requestIdx = i;
+            finish();
+            return;
+        }
         lastTime = 0;
         audioHint = false;
         load(i, 0);
@@ -634,12 +692,238 @@ public class VlcPlayerActivity extends AppCompatActivity {
         });
     }
 
+    // ------------------------------------------------------------ menus, rotate, episodes panel
+
+    private void rotateScreen() {
+        boolean land = getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        setRequestedOrientation(land ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    }
+
+    private void speedMenu() {
+        final String[] names = new String[SPEEDS.length];
+        for (int i = 0; i < SPEEDS.length; i++) names[i] = SPEEDS[i] + "x" + (i == speedIdx ? "  \u2713" : "");
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("Playback Speed")
+            .setItems(names, (d, which) -> {
+                speedIdx = which;
+                if (mp != null) mp.setRate(SPEEDS[speedIdx]);
+                showHud("Speed " + SPEEDS[speedIdx] + "x");
+            })
+            .show();
+    }
+
+    private void playerMenu() {
+        final String[] opts = {
+            (hardware ? "\u2713 " : "") + "Hardware decoder",
+            (!hardware ? "\u2713 " : "") + "Software decoder (more compatible)",
+            "Open with another app"
+        };
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("Player")
+            .setItems(opts, (d, which) -> {
+                if (which == 0 && !hardware) { hardware = true; reloadHere(); }
+                else if (which == 1 && hardware) { hardware = false; reloadHere(); }
+                else if (which == 2) openWithOtherPlayer();
+            })
+            .show();
+    }
+
+    private void showEpisodes() {
+        if (urls.size() <= 1) { showHud("No other videos in this list"); return; }
+        panelSeason = seasons.get(index);
+        buildPanel();
+        setBars(false);
+        panelHolder.setVisibility(View.VISIBLE);
+    }
+
+    private void hideEpisodes() {
+        if (panelHolder != null) panelHolder.setVisibility(View.GONE);
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (panelHolder != null && panelHolder.getVisibility() == View.VISIBLE) { hideEpisodes(); return; }
+        super.onBackPressed();
+    }
+
+    private void buildPanel() {
+        panelBox.removeAllViews();
+        TreeSet<Integer> ss = new TreeSet<>();
+        for (int s : seasons) ss.add(s);
+        final boolean multi = ss.size() > 1;
+        if (multi) {
+            HorizontalScrollView hs = new HorizontalScrollView(this);
+            hs.setHorizontalScrollBarEnabled(false);
+            LinearLayout chips = new LinearLayout(this);
+            chips.setPadding(dp(14), dp(14), dp(14), dp(6));
+            for (final int s : ss) {
+                TextView c = new TextView(this);
+                c.setText(s > 0 ? "Season " + s : "Specials");
+                c.setTextSize(15f);
+                c.setPadding(dp(18), dp(8), dp(18), dp(8));
+                boolean sel = s == panelSeason;
+                c.setTextColor(sel ? Color.BLACK : 0xFFB8B8C4);
+                GradientDrawable bg = new GradientDrawable();
+                bg.setCornerRadius(dp(22));
+                bg.setColor(sel ? 0xFFFBBF24 : 0x14FFFFFF);
+                c.setBackground(bg);
+                c.setOnClickListener(v -> { panelSeason = s; buildPanel(); });
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                lp.rightMargin = dp(8);
+                chips.addView(c, lp);
+            }
+            hs.addView(chips);
+            panelBox.addView(hs, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        } else {
+            TextView head = plain("Videos", 17f);
+            head.setTypeface(head.getTypeface(), android.graphics.Typeface.BOLD);
+            head.setPadding(dp(18), dp(16), dp(18), dp(6));
+            panelBox.addView(head);
+        }
+        ScrollView sv = new ScrollView(this);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        for (int i = 0; i < urls.size(); i++) {
+            if (multi && seasons.get(i) != panelSeason) continue;
+            list.addView(episodeRow(i));
+        }
+        sv.addView(list);
+        panelBox.addView(sv, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+    }
+
+    private View episodeRow(final int i) {
+        LinearLayout row = new LinearLayout(this);
+        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        if (i == index) row.setBackgroundColor(0x26FBBF24);
+
+        FrameLayout th = new FrameLayout(this);
+        GradientDrawable thbg = new GradientDrawable();
+        thbg.setColor(0xFF2A2938);
+        thbg.setCornerRadius(dp(10));
+        th.setBackground(thbg);
+        th.setClipToOutline(true);
+        ImageView iv = new ImageView(this);
+        iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        th.addView(iv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        loadImage(iv, thumbs.get(i));
+        TextView num = new TextView(this);
+        num.setText(String.valueOf(episodes.get(i) > 0 ? episodes.get(i) : (i + 1)));
+        num.setTextColor(Color.WHITE);
+        num.setTextSize(14f);
+        num.setGravity(Gravity.CENTER);
+        num.setTypeface(num.getTypeface(), android.graphics.Typeface.BOLD);
+        num.setBackgroundColor(0xCC000000);
+        th.addView(num, new FrameLayout.LayoutParams(dp(30), dp(28), Gravity.TOP | Gravity.END));
+        if (i == index) {
+            TextView now = new TextView(this);
+            now.setText("\u25B6 NOW");
+            now.setTextColor(Color.BLACK);
+            now.setTextSize(10f);
+            now.setGravity(Gravity.CENTER);
+            now.setBackgroundColor(0xFFFBBF24);
+            now.setPadding(dp(6), dp(2), dp(6), dp(2));
+            th.addView(now, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START));
+        }
+        row.addView(th, new LinearLayout.LayoutParams(dp(128), dp(74)));
+
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout head = new LinearLayout(this);
+        TextView name = plain(!epTitles.get(i).isEmpty() ? epTitles.get(i) : titles.get(i), 15f);
+        name.setPadding(0, 0, 0, 0);
+        name.setTypeface(name.getTypeface(), android.graphics.Typeface.BOLD);
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        head.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        if (!releases.get(i).isEmpty()) {
+            TextView date = plain(releases.get(i), 11f);
+            date.setPadding(dp(8), 0, 0, 0);
+            date.setTextColor(0xFF9A9AA8);
+            head.addView(date);
+        }
+        col.addView(head);
+        if (!overviews.get(i).isEmpty()) {
+            TextView ov = plain(overviews.get(i), 12f);
+            ov.setPadding(0, dp(3), 0, 0);
+            ov.setTextColor(0xFF9A9AA8);
+            ov.setMaxLines(3);
+            ov.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            col.addView(ov);
+        }
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        clp.leftMargin = dp(12);
+        row.addView(col, clp);
+        row.setOnClickListener(v -> {
+            hideEpisodes();
+            if (i != index) go(i);
+        });
+        return row;
+    }
+
+    private void loadImage(final ImageView iv, final String url) {
+        if (url == null || url.isEmpty()) return;
+        iv.setTag(url);
+        Bitmap c = imgCache.get(url);
+        if (c != null) { iv.setImageBitmap(c); return; }
+        new Thread(() -> {
+            try {
+                java.net.HttpURLConnection con = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                con.setConnectTimeout(8000);
+                con.setReadTimeout(10000);
+                con.setRequestProperty("User-Agent", "Mozilla/5.0 GooWatch");
+                java.io.InputStream in = con.getInputStream();
+                BitmapFactory.Options o = new BitmapFactory.Options();
+                o.inSampleSize = 2;
+                final Bitmap bmp = BitmapFactory.decodeStream(in, null, o);
+                in.close();
+                if (bmp == null) return;
+                imgCache.put(url, bmp);
+                ui.post(() -> { if (url.equals(iv.getTag())) iv.setImageBitmap(bmp); });
+            } catch (Throwable ignored) { }
+        }).start();
+    }
+
     // ------------------------------------------------------------ ui helpers
+
+    private TextView plain(String text, float sp) {
+        TextView b = new TextView(this);
+        b.setText(text);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(sp);
+        b.setGravity(Gravity.CENTER);
+        b.setPadding(dp(8), dp(4), dp(8), dp(4));
+        b.setShadowLayer(6f, 0f, 1f, 0xAA000000);
+        return b;
+    }
+
+    private TextView action(String glyph, String label) {
+        TextView b = plain(glyph + "  " + label, 14f);
+        b.setSingleLine(true);
+        b.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        b.setPadding(dp(6), dp(12), dp(6), dp(8));
+        return b;
+    }
+
+    private LinearLayout.LayoutParams actionLp() {
+        return new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+    }
+
+    private LinearLayout.LayoutParams gap() {
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        p.leftMargin = dp(14);
+        return p;
+    }
+
+    private LinearLayout.LayoutParams ctl(int widthDp) {
+        return new LinearLayout.LayoutParams(dp(widthDp), dp(88));
+    }
+
 
     private void setBars(boolean show) {
         ui.removeCallbacks(hideBars);
         topBar.setVisibility(show ? View.VISIBLE : View.GONE);
         bottomBar.setVisibility(show ? View.VISIBLE : View.GONE);
+        centerBar.setVisibility(show ? View.VISIBLE : View.GONE);
         if (show) ui.postDelayed(hideBars, 4000);
     }
 
@@ -701,6 +985,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
             r.putExtra("index", index);
             r.putExtra("position", lastTime);
             r.putExtra("duration", lastDuration);
+            r.putExtra("request", requestIdx);
             if (errorText != null && lastTime < 5000) r.putExtra("error", errorText);
             setResult(RESULT_OK, r);
         }

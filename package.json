@@ -47,7 +47,8 @@
     "vite": ">=6.0.0",
     "@types/crypto-js": "4.2.0",
     "cheerio": "1.0.0",
-    "crypto-js": "4.2.0"
+    "crypto-js": "4.2.0",
+    "hls.js": "1.5.17"
   },
   "description": "GooWatch - a cinema-style browser and player for FTP / HTTP open-directory media servers. Windows desktop app with auto-update, Android APK, and web.",
   "author": "nurulislamtask",
@@ -71,6 +72,12 @@
       {
         "from": "build-bin",
         "to": "bin"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "GooWatch install link",
+        "schemes": ["goowatch", "stremio", "nuvio"]
       }
     ],
     "win": {

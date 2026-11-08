@@ -126,5 +126,24 @@ m = open(manifest, encoding='utf8').read()
 if 'REQUEST_INSTALL_PACKAGES' not in m:
     m = m.replace('<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
     open(manifest, 'w', encoding='utf8').write(m)
+# 4b) install links from websites: stremio:// nuvio:// goowatch:// open GooWatch (-> "Install extension?" popup)
+m = open(manifest, encoding='utf8').read()
+if 'android:scheme="stremio"' not in m:
+    filt = '''
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="stremio" />
+                <data android:scheme="nuvio" />
+                <data android:scheme="goowatch" />
+            </intent-filter>'''
+    i = m.find('android:name=".MainActivity"')
+    j = m.find('</activity>', i)
+    if i >= 0 and j > 0:
+        m = m[:j] + filt + '\n        ' + m[j:]
+    if 'launchMode' not in m[i - 400:j]:
+        m = m.replace('android:name=".MainActivity"', 'android:name=".MainActivity" android:launchMode="singleTask"', 1)
+    open(manifest, 'w', encoding='utf8').write(m)
 print('native player installed')
 print('android prepared')

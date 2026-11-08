@@ -238,3 +238,37 @@ export async function fetchExtSubtitles(exts: InstalledExt[], type: string, id: 
   );
   return out;
 }
+
+/** Finds one playable stream for an episode / movie (used when the player jumps to another episode). */
+export function pickBestStream(exts: InstalledExt[], type: string, videoId: string, maxMs = 30000): Promise<ResolvedStream | null> {
+  return new Promise((resolveP) => {
+    let best: ResolvedStream | null = null;
+    let done = false;
+    let firstAt = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolveP(best);
+    };
+    const timer = setTimeout(finish, maxMs);
+    fetchStreams(exts, type, videoId, (all, pending) => {
+      const p = all.find((s) => s.playable && s.url);
+      if (p) {
+        best = p;
+        if (!firstAt) firstAt = Date.now();
+      }
+      if (pending === 0 || (best && Date.now() - firstAt > 4000)) finish();
+    })
+      .then(() => finish())
+      .catch(() => finish());
+    // if answers trickle in slowly, stop shortly after the first playable stream
+    const poll = setInterval(() => {
+      if (done) return clearInterval(poll);
+      if (best && Date.now() - firstAt > 4000) {
+        clearInterval(poll);
+        finish();
+      }
+    }, 800);
+  });
+}

@@ -125,6 +125,60 @@ export async function installExtension(input: string, builtin = false): Promise<
   return ext;
 }
 
+export interface ExtPreviewInfo {
+  kind: 'stremio' | 'nuvio';
+  name: string;
+  description?: string;
+  logo?: string;
+  version?: string;
+  provides: string[];
+  count?: number;
+  installed: boolean;
+}
+
+/** Looks at an address WITHOUT installing it, so the user can confirm first (used by website install links). */
+export async function previewExtension(input: string): Promise<ExtPreviewInfo> {
+  const raw = input.trim();
+  const list = load();
+  if (!/^stremio:\/\//i.test(raw)) {
+    for (const cand of nuvioBaseCandidates(raw)) {
+      const repo = await loadNuvioRepo(cand);
+      if (repo) {
+        return {
+          kind: 'nuvio',
+          name: repo.name,
+          description: `Provider repository with ${repo.scrapers.length} providers`,
+          provides: ['streams'],
+          count: repo.scrapers.length,
+          installed: list.some((e) => e.base === cand),
+        };
+      }
+    }
+  }
+  const base = normalizeBase(raw);
+  let probe: any = null;
+  try {
+    probe = await getJson(`${base}/manifest.json`, 0, 12000);
+  } catch (e: any) {
+    throw new Error(`Could not open this address (${e?.message || 'network error'})`);
+  }
+  if (looksLikeCloudStream(probe)) {
+    throw new Error('This is a CloudStream repository. CloudStream plugins (.cs3) are native Android code and cannot run inside GooWatch.');
+  }
+  if (!probe || !probe.id || !probe.name) throw new Error('This address is not a Stremio add-on or a Nuvio provider repository');
+  const res = ((probe.resources || []) as any[]).map((r) => (typeof r === 'string' ? r : r.name));
+  return {
+    kind: 'stremio',
+    name: probe.name,
+    description: probe.description,
+    logo: probe.logo,
+    version: probe.version,
+    provides: res.filter((v, i, a) => a.indexOf(v) === i),
+    count: Array.isArray(probe.catalogs) ? probe.catalogs.length : undefined,
+    installed: list.some((e) => e.base === base || e.manifest.id === probe.id),
+  };
+}
+
 export function setScraperEnabled(base: string, id: string, on: boolean) {
   const e = load().find((x) => x.base === base);
   const s = e?.scrapers?.find((x) => x.id === id);

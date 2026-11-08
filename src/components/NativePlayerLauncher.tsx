@@ -6,6 +6,7 @@ import { NativePlayer, NativePlayerItem } from '../mobile/nativePlayer';
 import { displayTitle } from '../utils/titleClean';
 import { registerBack } from '../mobile/backStack';
 import { playerEpisodeTitle } from '../mobile/episodeGuide';
+import { resolveEpisodeItem } from '../extensions/play';
 import { readPrefs } from '../mobile/prefs';
 import { withTimeout } from '../utils/withTimeout';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
@@ -93,48 +94,104 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
           }
         }
 
-        // 2. queue = this episode + the other episodes of the season (next / previous buttons work)
+        // 2. queue = this episode + the others (next / previous buttons, "Videos" panel with seasons)
         const toSub = (list: ParsedFtpItem[]) =>
           list.slice(0, 25).map((s) => ({ url: safeUrl(s.url), label: s.cleanTitle || s.rawName }));
         const epRegex = (ep?: number) =>
           ep ? new RegExp(`(?:e|x|ep\\.?\\s*)0*${ep}(?!\\d)`, 'i') : null;
 
-        const queue: { id: string; item: NativePlayerItem }[] = [];
-        for (const p of playlist || []) {
-          if (p.id === video.id) {
-            queue.push({
-              id: p.id,
-              item: { url: safeUrl(url), title: titleOf(p), ...metaOf(p), subtitles: toSub(subtitles || []) },
-            });
-          } else if (!p.isDirectory && (p.directStream || DIRECT_VIDEO.test(p.url))) {
-            const re = epRegex(p.episode);
-            const subs = re ? (subtitles || []).filter((s) => re.test(s.rawName)) : [];
-            queue.push({ id: p.id, item: { url: safeUrl(p.url), title: titleOf(p), ...metaOf(p), subtitles: toSub(subs) } });
-          }
-        }
-        if (!queue.some((q) => q.id === video.id)) {
-          queue.splice(0, queue.length, {
-            id: video.id,
-            item: { url: safeUrl(url), title: titleOf(video), ...metaOf(video), subtitles: toSub(subtitles || []) },
-          });
-        }
-        const index = Math.max(0, queue.findIndex((q) => q.id === video.id));
-
-        const saved = readPositions()[video.id];
+        let cur: ParsedFtpItem = { ...video, url };
+        let startAt = (() => {
+          const saved = readPositions()[video.id];
+          return initialStartTime > 0 ? initialStartTime : saved && readPrefs().resumePlayback ? saved.t : 0;
+        })();
         const prefs = readPrefs();
-        const startAt = initialStartTime > 0 ? initialStartTime : saved && prefs.resumePlayback ? saved.t : 0;
 
-        setStatus('Starting…');
-        const res = await NativePlayer.play({ items: queue.map((q) => q.item), index, position: startAt, software: prefs.softwareDecoder, autoSubs: prefs.autoSubtitles, subLang: prefs.subtitleLang });
-        if (!alive) return;
+        for (let hop = 0; hop < 60; hop++) {
+          const queue: { id: string; item: NativePlayerItem }[] = [];
+          const guide = cur.episodeGuide;
+          if (guide && cur.extType) {
+            // extension series: every episode is listed, only the current one has a stream yet
+            const base = (cur.cleanTitle || cur.rawName).split(' · ')[0];
+            guide.forEach((g) => {
+              const isCur = g.videoId === cur.extVideoId;
+              const extra = (cur.streamSubs || []).map((s) => ({ url: s.url, label: s.label }));
+              queue.push({
+                id: `ext:${g.videoId}`,
+                item: {
+                  url: isCur ? safeUrl(cur.url) : '',
+                  lazy: !isCur,
+                  title: playerEpisodeTitle(base, g.season, g.episode, `${base} - ${g.title}`),
+                  epTitle: g.title,
+                  thumb: g.thumb || cur.backdropUrl || cur.posterUrl,
+                  overview: g.overview,
+                  released: g.released,
+                  query: displayTitle(base),
+                  year: cur.year,
+                  season: g.season,
+                  episode: g.episode,
+                  referer: isCur ? cur.streamReferer : undefined,
+                  userAgent: isCur ? cur.streamUserAgent : undefined,
+                  subtitles: isCur ? extra : [],
+                },
+              });
+            });
+          } else {
+            for (const p of playlist || []) {
+              const thumb = p.backdropUrl || p.posterUrl;
+              if (p.id === cur.id) {
+                queue.push({
+                  id: p.id,
+                  item: { url: safeUrl(cur.url), title: titleOf(p), ...metaOf(p), thumb, subtitles: toSub(subtitles || []) },
+                });
+              } else if (!p.isDirectory && (p.directStream || DIRECT_VIDEO.test(p.url))) {
+                const re = epRegex(p.episode);
+                const subs = re ? (subtitles || []).filter((s) => re.test(s.rawName)) : [];
+                queue.push({ id: p.id, item: { url: safeUrl(p.url), title: titleOf(p), ...metaOf(p), thumb, subtitles: toSub(subs) } });
+              }
+            }
+            if (!queue.some((q) => q.id === cur.id)) {
+              queue.splice(0, queue.length, {
+                id: cur.id,
+                item: { url: safeUrl(cur.url), title: titleOf(cur), ...metaOf(cur), subtitles: toSub(subtitles || []) },
+              });
+            }
+          }
+          const index = Math.max(0, queue.findIndex((q) => q.id === cur.id || q.id === `ext:${cur.extVideoId}`));
 
-        const playedId = queue[Math.min(res.index, queue.length - 1)]?.id || video.id;
-        savePosition(playedId, res.position, res.duration);
+          setStatus('Starting…');
+          const res = await NativePlayer.play({
+            items: queue.map((q) => q.item),
+            index,
+            position: startAt,
+            software: prefs.softwareDecoder,
+            autoSubs: prefs.autoSubtitles,
+            subLang: prefs.subtitleLang,
+          });
+          if (!alive) return;
 
-        if (res.error && res.position < 5) {
-          // the native player could not start this file: try the in-app web player as a last resort
-          setFallback(startAt);
-          return;
+          const playedId = queue[Math.min(res.index, queue.length - 1)]?.id || cur.id;
+          savePosition(playedId, res.position, res.duration);
+
+          if (res.error && res.position < 5) {
+            setFallback(startAt);
+            return;
+          }
+
+          // the viewer picked / auto-advanced to an episode whose stream is not known yet
+          if (typeof res.request === 'number' && res.request >= 0 && guide && guide[res.request]) {
+            const ep = guide[res.request];
+            setStatus(`Finding a stream for ${ep.title}…`);
+            try {
+              cur = await resolveEpisodeItem(cur, ep);
+              startAt = readPositions()[`ext:${ep.videoId}`]?.t || 0;
+              continue;
+            } catch (e: any) {
+              if (alive) setFailure(e?.message || 'No stream found for this episode');
+              return;
+            }
+          }
+          break;
         }
         onClose();
       } catch {

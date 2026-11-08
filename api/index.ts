@@ -2825,6 +2825,29 @@ app.get(['/api/subs/vtt', '/subs/vtt'], async (req, res) => {
 });
 
 /**
+ * API: any subtitle file address (srt / vtt, optionally gz) -> WebVTT (used for subtitles that add-ons offer)
+ */
+app.get(['/api/subs/convert', '/subs/convert'], async (req, res) => {
+  const link = String(req.query.url || '');
+  const offset = parseFloat(String(req.query.offset || '0')) || 0;
+  res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+  try {
+    const u = new URL(link);
+    if (!/^https?:$/.test(u.protocol)) throw new Error('bad protocol');
+    const r = await fetch(link, { headers: { 'User-Agent': 'Mozilla/5.0 GooWatch' }, signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    let buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length > 4_000_000) throw new Error('too large');
+    if (buf.length > 2 && buf[0] === 0x1f && buf[1] === 0x8b) buf = zlib.gunzipSync(buf);
+    let text = buf.toString('utf8');
+    if (text.includes('\uFFFD')) text = buf.toString('latin1');
+    res.send(convertSrtToVtt(text.replace(/^\uFEFF/, ''), offset));
+  } catch {
+    res.send('WEBVTT\n\n');
+  }
+});
+
+/**
  * API: Extract embedded subtitle track from MKV/MP4 via FFmpeg into WebVTT
  */
 app.get(['/api/embedded-subtitle', '/embedded-subtitle'], (req, res) => {

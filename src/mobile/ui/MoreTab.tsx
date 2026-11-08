@@ -19,6 +19,7 @@ import { MobilePrefs } from '../prefs';
 import { clearCatalog } from '../catalogCache';
 import { clearResume } from '../resume';
 import { ExtManager } from './ExtManager';
+import { SourceCatalog } from './SourceCatalog';
 import { fetchLatestRelease, isNewer } from '../../components/AppUpdatePrompt';
 import { NativePlayer } from '../nativePlayer';
 import { AboutPanel } from '../../components/AboutPanel';
@@ -34,6 +35,7 @@ interface Props {
   onRefresh: () => void;
   onAddSource: (s: { name: string; url: string; type: 'movies' | 'series' }) => Promise<void>;
   onRemoveSource: (id: string) => void;
+  onActivateSource: (s: { id: string; name: string; url: string; type: 'movies' | 'series' }) => void;
   onSyncSource: (id: string) => Promise<void>;
   onClearHistory: () => void;
 }
@@ -196,6 +198,7 @@ export const MoreTab: React.FC<Props> = (p) => {
                 </button>
               </div>
             ))}
+            <SourceCatalog sources={p.sources} onActivate={p.onActivateSource} onDeactivate={p.onRemoveSource} />
             <p className="px-4 pb-1 pt-2 text-[11px] text-zinc-500">The eye decides if a source is shown on the Home page.</p>
             <button onClick={() => setShowAdd((v) => !v)} className="flex w-full items-center gap-2 px-4 py-3 text-[13.5px] font-semibold text-amber-400 active:bg-white/[0.04]">
               <Plus className="h-4 w-4" /> Add a source

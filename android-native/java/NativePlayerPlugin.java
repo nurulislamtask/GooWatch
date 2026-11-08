@@ -28,6 +28,17 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "NativePlayer")
 public class NativePlayerPlugin extends Plugin {
 
+    /** Returns (and clears) the install link that opened the app, if any. */
+    @PluginMethod
+    public void getLaunchUrl(PluginCall call) {
+        JSObject r = new JSObject();
+        if (MainActivity.pendingLink != null) {
+            r.put("url", MainActivity.pendingLink);
+            MainActivity.pendingLink = null;
+        }
+        call.resolve(r);
+    }
+
     @PluginMethod
     public void play(PluginCall call) {
         JSArray items = call.getArray("items");
@@ -93,6 +104,7 @@ public class NativePlayerPlugin extends Plugin {
         out.put("index", data != null ? data.getIntExtra("index", 0) : 0);
         out.put("position", data != null ? data.getLongExtra("position", 0L) / 1000.0 : 0.0);
         out.put("duration", data != null ? data.getLongExtra("duration", 0L) / 1000.0 : 0.0);
+        out.put("request", data != null ? data.getIntExtra("request", -1) : -1);
         String error = data != null ? data.getStringExtra("error") : null;
         if (error != null) out.put("error", error);
         call.resolve(out);

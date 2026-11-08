@@ -15,6 +15,8 @@ import { MoreTab } from './MoreTab';
 import { ExtDetail } from './ExtDetail';
 import { ExtPreview } from '../../extensions/types';
 import { SearchOverlay } from './SearchOverlay';
+import { InstallPrompt } from './InstallPrompt';
+import { useInstallLinks } from '../../extensions/deepLink';
 import { ShellApi, Tab } from './types';
 
 export interface MobileShellProps {
@@ -31,6 +33,7 @@ export interface MobileShellProps {
   busy: boolean;
   onAddSource: (s: { name: string; url: string; type: 'movies' | 'series' }) => Promise<void>;
   onRemoveSource: (id: string) => void;
+  onActivateSource: (s: { id: string; name: string; url: string; type: 'movies' | 'series' }) => void;
   onSyncSource: (id: string) => Promise<void>;
   onClearHistory: () => void;
 }
@@ -40,6 +43,8 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   const [tab, setTab] = useState<Tab>('home');
   const [searchOpen, setSearchOpen] = useState(false);
   const [ext, setExt] = useState<ExtPreview | null>(null);
+  const [installAddr, setInstallAddr] = useState<string | null>(null);
+  useInstallLinks(setInstallAddr);
   const [prefs, setPrefs] = usePrefs();
   const lib = useLibrary(props.sources);
   const [resumeTick, setResumeTick] = useState(0);
@@ -89,7 +94,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   }, []);
 
   return (
-    <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100 md:pb-10 md:pl-[232px]" style={{ WebkitOverflowScrolling: 'touch' }}>
       {tab === 'home' && <HomeTab api={api} prefs={prefs} scanning={lib.scanning} progress={lib.progress} />}
       {tab === 'discover' && <DiscoverTab api={api} />}
       {tab === 'list' && <ListTab api={api} />}
@@ -105,6 +110,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
           onRefresh={lib.refresh}
           onAddSource={props.onAddSource}
           onRemoveSource={props.onRemoveSource}
+          onActivateSource={props.onActivateSource}
           onSyncSource={props.onSyncSource}
           onClearHistory={props.onClearHistory}
         />
@@ -140,6 +146,8 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
           onPlay={(it) => props.onPlayDirect(it)}
         />
       )}
+
+      {installAddr && <InstallPrompt address={installAddr} onClose={() => setInstallAddr(null)} />}
 
       {props.busy && (
         <div className="fixed inset-0 z-[260] flex items-center justify-center bg-black/50">

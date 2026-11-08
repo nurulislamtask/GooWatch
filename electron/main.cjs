@@ -38,6 +38,37 @@ if (!gotLock) {
 
 let mainWindow = null;
 
+// ---- Install links from websites: stremio://…  nuvio://…  goowatch://…  -> open GooWatch + "Install?" popup ----
+const LINK_SCHEMES = ['goowatch', 'stremio', 'nuvio'];
+const findLink = (argv) => (argv || []).find((a) => typeof a === 'string' && LINK_SCHEMES.some((s) => a.toLowerCase().startsWith(s + '://')));
+let pendingLink = findLink(process.argv);
+function deliverLink(url) {
+  if (!url) return;
+  if (!mainWindow || mainWindow.webContents.isLoading()) {
+    pendingLink = url;
+    return;
+  }
+  const j = JSON.stringify(url);
+  mainWindow.webContents
+    .executeJavaScript(`window.__gwPendingLink=${j};window.dispatchEvent(new CustomEvent('goowatch-link',{detail:${j}}))`)
+    .catch(() => {});
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+}
+try {
+  for (const s of LINK_SCHEMES) {
+    if (process.defaultApp) {
+      if (process.argv.length >= 2) app.setAsDefaultProtocolClient(s, process.execPath, [path.resolve(process.argv[1])]);
+    } else {
+      app.setAsDefaultProtocolClient(s);
+    }
+  }
+} catch {}
+app.on('open-url', (e, url) => {
+  e.preventDefault();
+  deliverLink(url);
+});
+
 async function boot() {
   const distPath = path.join(__dirname, '..', 'dist');
   const { startServer } = require('./server.cjs');
@@ -92,6 +123,11 @@ async function boot() {
 
   await mainWindow.loadURL(appOrigin);
   mainWindow.on('closed', () => (mainWindow = null));
+  if (pendingLink) {
+    const l = pendingLink;
+    pendingLink = null;
+    setTimeout(() => deliverLink(l), 1200);
+  }
   setupAutoUpdate();
 }
 
@@ -158,7 +194,8 @@ function setupAutoUpdate() {
   setInterval(check, 4 * 60 * 60 * 1000);
 }
 
-app.on('second-instance', () => {
+app.on('second-instance', (_e, argv) => {
+  deliverLink(findLink(argv));
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();

@@ -581,6 +581,11 @@ export default function App() {
     saveSources([created, ...sources]);
   };
 
+  const handleActivateSource = (c: { id: string; name: string; url: string; type: 'movies' | 'series' }) => {
+    if (sources.some((s) => s.id === c.id)) return;
+    saveSources([{ id: c.id, name: c.name, url: c.url, type: c.type, count: 0, lastSynced: 'Just now', status: 'online' }, ...sources]);
+  };
+
   const handleRemoveSource = (id: string) => {
     saveSources(sources.filter((s) => s.id !== id));
   };
@@ -678,6 +683,7 @@ export default function App() {
           busy={isLoading && !isDeepScanning}
           onAddSource={handleAddSource}
           onRemoveSource={handleRemoveSource}
+          onActivateSource={handleActivateSource}
           onSyncSource={handleSyncSource}
           onClearHistory={() => {
             setRecentlyPlayed([]);

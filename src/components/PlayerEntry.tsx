@@ -1,8 +1,9 @@
 import React from 'react';
 import { IS_CAPACITOR } from '../utils/platform';
-import { CinemaPlayerWeb, CinemaPlayerProps } from './CinemaPlayer';
+import type { CinemaPlayerProps } from './CinemaPlayer';
+import { ModernPlayer } from './ModernPlayer';
 import { NativePlayerLauncher } from './NativePlayerLauncher';
 
-/** Phone app: native ExoPlayer (plays MKV / AC3 / HEVC, MX-style controls). PC / web: the original cinema player. */
+/** Phone: native libVLC player. PC / web: GooWatch's own ModernPlayer. */
 export const CinemaPlayer: React.FC<CinemaPlayerProps> = (props) =>
-  IS_CAPACITOR ? <NativePlayerLauncher {...props} /> : <CinemaPlayerWeb {...props} />;
+  IS_CAPACITOR ? <NativePlayerLauncher {...props} /> : <ModernPlayer {...props} />;

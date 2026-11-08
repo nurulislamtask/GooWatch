@@ -12,6 +12,18 @@ export type MediaKind =
   | 'audio'
   | 'other';
 
+/** One entry of the "Videos" panel inside the player (seasons + episodes). */
+export interface PlayerEpisode {
+  season: number;
+  episode: number;
+  title: string;
+  overview?: string;
+  thumb?: string;
+  released?: string;
+  /** extension episodes: the id used to ask add-ons for a stream */
+  videoId?: string;
+}
+
 export interface ParsedFtpItem {
   id: string;
   rawName: string;
@@ -44,6 +56,12 @@ export interface ParsedFtpItem {
   directStream?: boolean;
   streamReferer?: string;
   streamUserAgent?: string;
+  /** extension title: type (movie/series/anime…) + the id of this episode, the full episode list for the player panel */
+  extType?: string;
+  extVideoId?: string;
+  episodeGuide?: PlayerEpisode[];
+  epTitle?: string;
+  streamSubs?: { url: string; label: string }[];
 }
 
 export function extractSeasonNumber(rawName: string): number | undefined {

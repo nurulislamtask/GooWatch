@@ -5,6 +5,7 @@ import { fetchMeta, fetchStreams } from '../../extensions/client';
 import { useExtensions } from '../../extensions/store';
 import { isExtSaved, toggleExtSaved, useExtSaved } from '../../extensions/library';
 import { ParsedFtpItem } from '../../utils/ftpParser';
+import { addonSubtitles, buildExtItem, guideFromVideos } from '../../extensions/play';
 
 interface Target {
   videoId: string;
@@ -74,36 +75,34 @@ export const ExtDetail: React.FC<{
     } else pickStreams({ videoId: preview.id });
   };
 
-  const start = (s: ResolvedStream) => {
+  const start = async (s: ResolvedStream) => {
     if (s.external) {
       window.open(s.external, '_blank');
       return;
     }
     if (!s.playable || !s.url || !target) return;
+    const tg = target;
     const title = meta?.name || preview.name;
-    const isEp = target.episode !== undefined;
+    const isEp = tg.episode !== undefined;
     const year = parseInt(String(meta?.year || meta?.releaseInfo || preview.year || ''), 10) || undefined;
-    const item: ParsedFtpItem = {
-      id: `ext:${target.videoId}`,
-      rawName: title,
-      cleanTitle: title,
-      url: s.url,
-      isDirectory: false,
-      sizeFormatted: '',
-      lastModified: '',
-      mediaKind: isEp ? 'episode' : 'movie',
-      year,
-      season: isEp ? target.season ?? 1 : undefined,
-      episode: target.episode,
-      posterUrl: meta?.poster || preview.poster,
-      backdropUrl: meta?.background || preview.background,
-      directStream: true,
-      streamReferer: s.referer,
-      streamUserAgent: s.userAgent,
-      sourceServerName: s.addon,
-    } as ParsedFtpItem;
     setTarget(null);
-    onPlay(item);
+    const extra = await addonSubtitles(preview.type, tg.videoId);
+    onPlay(
+      buildExtItem({
+        title,
+        type: preview.type,
+        videoId: tg.videoId,
+        season: isEp ? tg.season ?? 1 : undefined,
+        episode: tg.episode,
+        epTitle: tg.epTitle,
+        year,
+        poster: meta?.poster || preview.poster,
+        background: meta?.background || preview.background,
+        stream: s,
+        guide: isEp ? guideFromVideos(meta?.videos) : undefined,
+        extraSubs: extra,
+      })
+    );
   };
 
   const bg = meta?.background || preview.background || meta?.poster || preview.poster;

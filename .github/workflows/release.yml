@@ -125,3 +125,20 @@ jobs:
           gh release upload "v${{ needs.version.outputs.v }}" "GooWatch-${{ needs.version.outputs.v }}.apk" --clobber --repo "nurulislamtask/${{ needs.windows.outputs.repo }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # keep ONE release only: the newest one
+  cleanup:
+    needs: [version, windows, android]
+    if: success()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          keep="v${{ needs.version.outputs.v }}"
+          for tag in $(gh release list --repo "${{ github.repository }}" --limit 200 --json tagName -q '.[].tagName'); do
+            if [ "$tag" != "$keep" ]; then
+              echo "deleting old release $tag"
+              gh release delete "$tag" --cleanup-tag --yes --repo "${{ github.repository }}" || true
+            fi
+          done
