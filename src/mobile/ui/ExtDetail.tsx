@@ -214,7 +214,7 @@ export const ExtDetail: React.FC<{
       {target && (
         <div className="fixed inset-0 z-[240] flex items-end bg-black/60 md:items-center md:justify-center" onClick={() => setTarget(null)}>
           <div
-            className="max-h-[78vh] w-full overflow-y-auto rounded-t-3xl bg-[#10131B] p-4 md:max-w-xl md:rounded-3xl"
+            className="max-h-[78vh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl bg-[#10131B] p-4 md:max-w-xl md:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
@@ -233,30 +233,59 @@ export const ExtDetail: React.FC<{
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking {pending} extension{pending === 1 ? '' : 's'}…
               </p>
             )}
-            {streams.map((s) => (
-              <button
-                key={s.key}
-                onClick={() => start(s)}
-                disabled={!s.playable && !s.external}
-                className={`mb-2 flex w-full items-start gap-3 rounded-xl p-3 text-left ring-1 ring-white/[0.06] ${
-                  s.playable || s.external ? 'bg-white/[0.06] active:bg-white/15' : 'bg-white/[0.02] opacity-50'
-                }`}
-              >
-                {s.external ? <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /> : <Play className={`mt-0.5 h-4 w-4 shrink-0 ${s.playable ? 'fill-amber-400 text-amber-400' : 'text-zinc-600'}`} />}
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold leading-snug text-white">{s.label}</p>
-                  {s.detail && s.detail !== s.label && <p className="mt-0.5 line-clamp-2 text-[11.5px] text-zinc-400">{s.detail}</p>}
-                  <p className="mt-0.5 text-[10.5px] text-zinc-500">{s.reason ? `${s.addon} · ${s.reason}` : s.addon}</p>
-                </div>
-              </button>
-            ))}
+            {(() => {
+              const playable = streams.filter((s) => s.playable || s.external);
+              const torrents = streams.filter((s) => !s.playable && !s.external);
+              const row = (s: ResolvedStream) => (
+                <button
+                  key={s.key}
+                  onClick={() => start(s)}
+                  disabled={!s.playable && !s.external}
+                  className={`mb-2 flex w-full min-w-0 items-start gap-3 rounded-xl p-3 text-left ring-1 ring-white/[0.06] ${
+                    s.playable || s.external ? 'bg-white/[0.06] active:bg-white/15' : 'bg-white/[0.02] opacity-50'
+                  }`}
+                >
+                  {s.external ? <ExternalLink className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /> : <Play className={`mt-0.5 h-4 w-4 shrink-0 ${s.playable ? 'fill-amber-400 text-amber-400' : 'text-zinc-600'}`} />}
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words text-[13px] font-semibold leading-snug text-white [overflow-wrap:anywhere]">{s.label}</p>
+                    {s.detail && s.detail !== s.label && <p className="mt-0.5 line-clamp-2 break-words text-[11.5px] text-zinc-400 [overflow-wrap:anywhere]">{s.detail}</p>}
+                    <p className="mt-0.5 text-[10.5px] text-zinc-500">{s.reason ? `${s.addon} · ${s.reason}` : s.addon}</p>
+                  </div>
+                </button>
+              );
+              return (
+                <>
+                  {playable.map(row)}
+                  {torrents.length > 0 && (
+                    <div className="mt-2 rounded-2xl bg-amber-400/[0.07] p-3.5 ring-1 ring-amber-400/20">
+                      <p className="text-[13.5px] font-bold text-amber-300">{torrents.length} torrent streams found — they can’t be played yet</p>
+                      <p className="mt-1 text-[12px] leading-relaxed text-zinc-300">
+                        Torrent links need a <b>debrid account</b> (Real-Debrid, AllDebrid, Premiumize…). It turns the torrent into a normal link GooWatch can play.
+                      </p>
+                      <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12px] text-zinc-300">
+                        <li>Open the Torrentio setup page and choose your debrid service + key.</li>
+                        <li>Press its <b>Install</b> button — GooWatch opens and asks to confirm (or copy the link and paste it in Extensions).</li>
+                        <li>Come back here: the streams become playable.</li>
+                      </ol>
+                      <button
+                        onClick={() => window.open('https://torrentio.strem.fun/configure', '_blank')}
+                        className="mt-3 rounded-xl bg-amber-400 px-4 py-2.5 text-[13px] font-extrabold text-black active:scale-95"
+                      >
+                        Set up debrid (Torrentio)
+                      </button>
+                      <details className="mt-3">
+                        <summary className="cursor-pointer text-[12px] text-zinc-400">Show the torrent list</summary>
+                        <div className="mt-2">{torrents.map(row)}</div>
+                      </details>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
             {pending === 0 && streams.length === 0 && (
               <p className="py-6 text-center text-[13px] text-zinc-400">
                 No stream found. Add an extension that provides streams (Settings → Extensions), then try again.
               </p>
-            )}
-            {pending === 0 && streams.length > 0 && !streams.some((x) => x.playable) && (
-              <p className="py-2 text-center text-[12px] text-zinc-500">These are torrent-only. Add an extension that gives direct (HTTP) streams to play them.</p>
             )}
           </div>
         </div>
