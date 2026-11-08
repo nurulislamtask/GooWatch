@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Loader2, Plus, Puzzle, Trash2 } from 'lucide-react';
 import { installExtension, removeExtension, setExtensionEnabled, setScraperEnabled, SUGGESTED, useExtensions } from '../../extensions/store';
+import { openAddonStore } from '../../extensions/catalog';
 import { getTmdbKey, setTmdbKey } from '../../extensions/nuvio';
 
 export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
@@ -44,6 +45,9 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             Extensions bring movies, series, anime, streams and subtitles. Press <b>Install</b> on an add-on website and GooWatch opens by itself
             and asks to confirm — or paste an address below.
           </p>
+          <button onClick={openAddonStore} className="mt-3 rounded-xl bg-amber-400 px-4 py-2.5 text-[14px] font-extrabold text-black active:scale-95">
+            Browse add-on store
+          </button>
           <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] font-semibold">
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">Stremio add-ons · stremio://</span>
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">Nuvio providers · GitHub repo</span>

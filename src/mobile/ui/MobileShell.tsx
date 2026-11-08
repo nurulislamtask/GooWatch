@@ -16,6 +16,8 @@ import { ExtDetail } from './ExtDetail';
 import { ExtPreview } from '../../extensions/types';
 import { SearchOverlay } from './SearchOverlay';
 import { InstallPrompt } from './InstallPrompt';
+import { AddonStore } from './AddonStore';
+import { STORE_EVENT } from '../../extensions/catalog';
 import { useInstallLinks } from '../../extensions/deepLink';
 import { ShellApi, Tab } from './types';
 
@@ -45,6 +47,12 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   const [ext, setExt] = useState<ExtPreview | null>(null);
   const [installAddr, setInstallAddr] = useState<string | null>(null);
   useInstallLinks(setInstallAddr);
+  const [storeOpen, setStoreOpen] = useState(false);
+  useEffect(() => {
+    const f = () => setStoreOpen(true);
+    window.addEventListener(STORE_EVENT, f);
+    return () => window.removeEventListener(STORE_EVENT, f);
+  }, []);
   const [prefs, setPrefs] = usePrefs();
   const lib = useLibrary(props.sources);
   const [resumeTick, setResumeTick] = useState(0);
@@ -147,6 +155,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
         />
       )}
 
+      {storeOpen && <AddonStore onClose={() => setStoreOpen(false)} />}
       {installAddr && <InstallPrompt address={installAddr} onClose={() => setInstallAddr(null)} />}
 
       {props.busy && (

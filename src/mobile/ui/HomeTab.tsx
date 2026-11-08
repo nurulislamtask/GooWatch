@@ -5,6 +5,29 @@ import { MobilePoster } from './MobilePoster';
 import { Hero } from './Hero';
 import { ExtHero } from './ExtHero';
 import { ExtRows } from './ExtRows';
+import { openAddonStore } from '../../extensions/catalog';
+import { useExtensions } from '../../extensions/store';
+import { Puzzle } from 'lucide-react';
+
+const AddonBanner: React.FC = () => {
+  const exts = useExtensions();
+  if (exts.some((e) => !e.builtin)) return null;
+  return (
+    <button
+      onClick={openAddonStore}
+      className="mx-4 mt-6 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl bg-gradient-to-r from-amber-400/20 to-orange-500/5 p-4 text-left ring-1 ring-amber-400/25 active:scale-[0.99] md:mx-6 md:w-[calc(100%-3rem)]"
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-400/20">
+        <Puzzle className="h-6 w-6 text-amber-400" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-extrabold text-white">Get more movies, series & subtitles</span>
+        <span className="block text-[12px] text-zinc-400">Open the add-on store and install in one tap</span>
+      </span>
+      <span className="rounded-xl bg-amber-400 px-3.5 py-2 text-[13px] font-extrabold text-black">Browse</span>
+    </button>
+  );
+};
 import { Row } from './Row';
 import { ShellApi } from './types';
 import { MobilePrefs } from '../prefs';
@@ -206,11 +229,12 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
         </Row>
       )}
 
+      <AddonBanner />
       <ExtRows onOpen={api.openExt} />
 
       {library.length === 0 && (
         <p className="px-6 pt-10 text-center text-sm text-zinc-500">
-          {scanning ? 'Loading your library for the first time…' : 'Tip: add servers (Sources) or extensions in Settings.'}
+          {scanning ? 'Loading your library for the first time…' : 'Tip: open the add-on store to install movies, series and anime add-ons.'}
         </p>
       )}
     </div>
