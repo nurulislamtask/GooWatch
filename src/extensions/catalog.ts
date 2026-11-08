@@ -12,6 +12,7 @@ export interface CatalogAddon {
   /** needs a torrent / debrid service to actually play */
   needsDebrid: boolean;
   note?: string;
+  manifest?: any;
 }
 
 export const STORE_EVENT = 'goowatch-open-store';
@@ -56,6 +57,7 @@ export async function fetchAddonCollection(): Promise<CatalogAddon[]> {
       manifestUrl: url,
       version: m.version,
       needsDebrid: DEBRID.test(text) && !resources.includes('catalog'),
+      manifest: m,
     });
   }
   memo = { t: Date.now(), list };

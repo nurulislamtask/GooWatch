@@ -29,7 +29,7 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const have = new Set(exts.map((e) => e.base));
 
   return (
-    <div className="fixed inset-0 z-[250] overflow-y-auto bg-[#07080C] pb-10">
+    <div className="fixed inset-0 z-[250] overflow-y-auto overflow-x-hidden bg-[#07080C] pb-10">
       <div className="sticky top-0 z-10 flex items-center gap-2 bg-[#07080C]/95 px-3 py-3 backdrop-blur">
         <button onClick={onClose} aria-label="Back" className="rounded-full p-2 active:bg-white/10">
           <ArrowLeft className="h-5 w-5 text-white" />
@@ -37,7 +37,7 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <h1 className="text-[18px] font-extrabold text-white">Extensions</h1>
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 md:px-6">
+      <div className="mx-auto w-full min-w-0 max-w-3xl px-4 md:px-6">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-400/20 via-orange-500/10 to-transparent p-5 ring-1 ring-amber-400/20">
           <Puzzle className="absolute -right-4 -top-4 h-28 w-28 rotate-12 text-amber-400/10" />
           <h2 className="text-[20px] font-extrabold text-white">Add more to GooWatch</h2>
@@ -74,10 +74,10 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         {msg && <p className="mt-2 text-[12.5px] text-amber-300">{msg}</p>}
 
         <h2 className="mb-2 mt-6 text-[11.5px] font-bold uppercase tracking-wider text-zinc-500">Installed</h2>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {exts.length === 0 && <p className="p-4 text-[13px] text-zinc-500">Nothing installed yet — installing the built-in ones…</p>}
           {exts.map((e) => (
-            <div key={e.base} className={`overflow-hidden rounded-2xl bg-[#0F121A] ring-1 ${e.enabled ? 'ring-white/[0.07]' : 'opacity-60 ring-white/[0.04]'}`}>
+            <div key={e.base} className={`min-w-0 overflow-hidden rounded-2xl bg-[#0F121A] ring-1 ${e.enabled ? 'ring-white/[0.07]' : 'opacity-60 ring-white/[0.04]'}`}>
             <div className="flex items-center gap-3 p-3.5">
               {e.manifest.logo ? (
                 <img src={e.manifest.logo} alt="" className="h-12 w-12 shrink-0 rounded-xl bg-white/5 object-contain p-0.5" />
@@ -149,7 +149,7 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         {SUGGESTED.some((s) => !have.has(s.base)) && (
           <>
             <h2 className="mb-2 mt-6 text-[11.5px] font-bold uppercase tracking-wider text-zinc-500">Suggested</h2>
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {SUGGESTED.filter((s) => !have.has(s.base)).map((s) => (
                 <div key={s.base} className="flex items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.07]">
                   <div className="min-w-0 flex-1">

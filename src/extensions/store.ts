@@ -68,10 +68,39 @@ function looksLikeCloudStream(j: any): boolean {
 }
 
 /** Installs a Stremio add-on (manifest.json) or a Nuvio provider repository, from whatever address the user pastes. */
-export async function installExtension(input: string, builtin = false): Promise<InstalledExt> {
+export async function installExtension(input: string, builtin = false, known?: ExtManifest): Promise<InstalledExt> {
   const raw = input.trim();
   if (!raw) throw new Error('Paste an extension address');
   const list = load();
+
+  // 0) the add-on store already knows this manifest: install instantly, no network needed
+  if (known && known.id && known.name && !/^https?:\/\/github\.com\//i.test(raw)) {
+    const kbase = normalizeBase(raw);
+    const k: InstalledExt = { kind: 'stremio', base: kbase, manifest: known, enabled: true, builtin };
+    const ki = list.findIndex((e) => e.base === kbase || e.manifest.id === known.id);
+    if (ki >= 0) list[ki] = { ...k, enabled: list[ki].enabled };
+    else list.push(k);
+    save();
+    return k;
+  }
+
+  // 0b) a normal Stremio manifest is far more common than a Nuvio repo: try it first (fast path)
+  if (!/github\.com\//i.test(raw) && !/raw\.githubusercontent\.com/i.test(raw)) {
+    try {
+      const b0 = normalizeBase(raw);
+      const m0: any = await getJson(`${b0}/manifest.json`, 0, 12000);
+      if (m0 && m0.id && m0.name && !looksLikeCloudStream(m0) && !Array.isArray(m0.scrapers)) {
+        const e0: InstalledExt = { kind: 'stremio', base: b0, manifest: m0 as ExtManifest, enabled: true, builtin };
+        const i0 = list.findIndex((e) => e.base === b0 || e.manifest.id === m0.id);
+        if (i0 >= 0) list[i0] = { ...e0, enabled: list[i0].enabled };
+        else list.push(e0);
+        save();
+        return e0;
+      }
+    } catch {
+      /* fall through to the slower detection below */
+    }
+  }
 
   // 1) Nuvio repository (GitHub page / raw folder / manifest.json with "scrapers")
   const isGithubPage = /^https?:\/\/github\.com\//i.test(raw);

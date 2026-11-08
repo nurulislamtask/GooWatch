@@ -48,12 +48,13 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     }
   };
 
-  const install = async (name: string, url: string) => {
+  const install = async (name: string, url: string, manifest?: any) => {
     setBusy(url);
     setMsg(null);
     try {
-      await installExtension(url);
+      await installExtension(url, false, manifest);
       setMsg({ ok: true, text: `${name} installed` });
+      setTimeout(() => setMsg((m) => (m && m.ok ? null : m)), 2500);
     } catch (e: any) {
       setMsg({ ok: false, text: `${name}: ${e?.message || 'install failed'}` });
     } finally {
@@ -72,16 +73,16 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       .sort((a, b) => Number(a.needsDebrid) - Number(b.needsDebrid));
   }, [all, q, filter, showDebrid]);
 
-  const Btn: React.FC<{ name: string; url: string }> = ({ name, url }) =>
+  const Btn: React.FC<{ name: string; url: string; manifest?: any }> = ({ name, url, manifest }) =>
     isInstalled(url) ? (
-      <span className="flex items-center gap-1 rounded-xl bg-emerald-500/15 px-3 py-2 text-[12.5px] font-bold text-emerald-300">
+      <span className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-500/15 px-3 py-2 text-[12.5px] font-bold text-emerald-300">
         <Check className="h-4 w-4" /> Installed
       </span>
     ) : (
       <button
-        onClick={() => install(name, url)}
+        onClick={() => install(name, url, manifest)}
         disabled={busy === url}
-        className="flex items-center gap-1.5 rounded-xl bg-amber-400 px-4 py-2 text-[13px] font-extrabold text-black active:scale-95 disabled:opacity-60"
+        className="flex shrink-0 items-center gap-1.5 rounded-xl bg-amber-400 px-3.5 py-2 text-[13px] font-extrabold text-black active:scale-95 disabled:opacity-60"
       >
         {busy === url ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Install
       </button>
@@ -97,7 +98,7 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     );
 
   return (
-    <div className="fixed inset-0 z-[260] overflow-y-auto bg-[#07080C] pb-12">
+    <div className="fixed inset-0 z-[260] overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24">
       <div className="sticky top-0 z-10 bg-[#07080C]/95 px-3 pb-2 pt-3 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center gap-2">
           <button onClick={onClose} aria-label="Back" className="rounded-full p-2 active:bg-white/10">
@@ -107,10 +108,7 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
       </div>
 
-      <div className="mx-auto max-w-3xl px-4 md:px-6">
-        {msg && (
-          <p className={`mb-3 rounded-xl px-3 py-2.5 text-[13px] ${msg.ok ? 'bg-emerald-500/10 text-emerald-300' : 'bg-rose-500/10 text-rose-300'}`}>{msg.text}</p>
-        )}
+      <div className="mx-auto w-full min-w-0 max-w-3xl px-4 md:px-6">
 
         {/* recommended */}
         <div className="mb-2 mt-1 flex items-center justify-between">
@@ -121,9 +119,9 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             Install all recommended
           </button>
         </div>
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {RECOMMENDED.map((r) => (
-            <div key={r.manifestUrl} className="flex items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.07]">
+            <div key={r.manifestUrl} className="flex min-w-0 items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.07]">
               <Logo />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14.5px] font-bold text-white">
@@ -147,7 +145,7 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             className="w-full rounded-2xl bg-white/[0.07] py-3.5 pl-10 pr-4 text-[14px] text-white outline-none ring-1 ring-white/[0.06] placeholder:text-zinc-500 focus:ring-amber-400/50"
           />
         </div>
-        <div className="-mx-1 mt-3 flex gap-2 overflow-x-auto px-1 pb-1">
+        <div className="mt-3 flex max-w-full gap-2 overflow-x-auto pb-1">
           {FILTERS.map(([id, label]) => (
             <button key={id} onClick={() => setFilter(id)} className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold ${filter === id ? 'bg-amber-400 text-black' : 'bg-white/[0.08] text-zinc-300'}`}>
               {label}
@@ -166,21 +164,35 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         )}
         {err && <p className="mt-4 rounded-xl bg-white/5 p-3 text-[13px] text-zinc-400">{err}</p>}
 
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           {list.map((a) => (
-            <div key={a.id} className="flex items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.06]">
+            <div key={a.id} className="flex min-w-0 items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.06]">
               <Logo src={a.logo} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-bold text-white">{a.name}</p>
                 <p className="line-clamp-2 text-[12px] text-zinc-400">{a.description || a.resources.join(' · ')}</p>
                 <p className="mt-0.5 truncate text-[10.5px] capitalize text-zinc-600">{[...new Set([...a.types, ...a.resources])].slice(0, 5).join(' · ')}</p>
               </div>
-              <Btn name={a.name} url={a.manifestUrl} />
+              <Btn name={a.name} url={a.manifestUrl} manifest={a.manifest} />
             </div>
           ))}
         </div>
         {all && list.length === 0 && <p className="py-8 text-center text-[13px] text-zinc-500">No add-ons match.</p>}
       </div>
+      {busy && !msg && (
+        <div className="fixed inset-x-4 bottom-6 z-[270] mx-auto flex max-w-md items-center gap-2 rounded-2xl bg-[#1A1D27] px-4 py-3 text-[13px] text-zinc-200 shadow-2xl ring-1 ring-white/10">
+          <Loader2 className="h-4 w-4 animate-spin text-amber-400" /> Installing…
+        </div>
+      )}
+      {msg && (
+        <div
+          onClick={() => setMsg(null)}
+          className={`fixed inset-x-4 bottom-6 z-[270] mx-auto max-w-md rounded-2xl px-4 py-3 text-[13px] font-medium shadow-2xl ring-1 ${msg.ok ? 'bg-emerald-600 text-white ring-emerald-400/40' : 'bg-rose-600 text-white ring-rose-400/40'}`}
+        >
+          {msg.ok ? '✓ ' : '✕ '}
+          {msg.text}
+        </div>
+      )}
     </div>
   );
 };
