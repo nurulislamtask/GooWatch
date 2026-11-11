@@ -6,7 +6,10 @@ import { NativePlayer, NativePlayerItem } from '../mobile/nativePlayer';
 import { displayTitle } from '../utils/titleClean';
 import { registerBack } from '../mobile/backStack';
 import { playerEpisodeTitle } from '../mobile/episodeGuide';
-import { resolveEpisodeItem } from '../extensions/play';
+import { buildExtItem, resolveEpisodeItem } from '../extensions/play';
+import { fetchStreams } from '../extensions/client';
+import { getExtensions } from '../extensions/store';
+import type { ResolvedStream } from '../extensions/types';
 import { readPrefs } from '../mobile/prefs';
 import { withTimeout } from '../utils/withTimeout';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
@@ -64,6 +67,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
   const [failure, setFailure] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState('Opening player…');
+  const [picker, setPicker] = useState<null | { streams: ResolvedStream[]; loading: boolean; current: string; done: (s: ResolvedStream | null) => void }>(null);
   const launchedFor = useRef<string | null>(null);
   useEffect(() => registerBack(() => { onClose(); return true; }), []);
   const setFallback = (_startAt: number) =>
@@ -167,6 +171,7 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
             software: prefs.softwareDecoder,
             autoSubs: prefs.autoSubtitles,
             subLang: prefs.subtitleLang,
+            quality: !!(cur.extType && cur.extVideoId),
           });
           if (!alive) return;
 
@@ -176,6 +181,38 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
           if (res.error && res.position < 5) {
             setFallback(startAt);
             return;
+          }
+
+          // subtitle size changed in the player: reopen at the same minute
+          if (res.request === -3) {
+            startAt = res.position;
+            continue;
+          }
+          // Quality: show the other sources of this title, then continue at the same minute
+          if (res.request === -2 && cur.extType && cur.extVideoId) {
+            startAt = res.position;
+            const c0 = cur;
+            const chosen = await new Promise<ResolvedStream | null>((resolveP) => {
+              const done = (s: ResolvedStream | null) => {
+                setPicker(null);
+                resolveP(s);
+              };
+              setPicker({ streams: [], loading: true, current: c0.url, done });
+              fetchStreams(getExtensions(), c0.extType!, c0.extVideoId!, (all) => {
+                setPicker((p) => (p ? { ...p, streams: all.filter((s) => s.playable && s.url).slice(0, 40) } : p));
+              })
+                .catch(() => {})
+                .finally(() => setPicker((p) => (p ? { ...p, loading: false } : p)));
+            });
+            if (chosen) {
+              cur = buildExtItem({
+                title: c0.cleanTitle || c0.rawName, type: c0.extType!, videoId: c0.extVideoId!, season: c0.season, episode: c0.episode,
+                epTitle: c0.epTitle, year: c0.year, poster: c0.posterUrl, background: c0.backdropUrl, stream: chosen,
+                guide: c0.episodeGuide, extraSubs: c0.streamSubs,
+              });
+            }
+            setStatus('Starting…');
+            continue;
           }
 
           // the viewer picked / auto-advanced to an episode whose stream is not known yet
@@ -213,6 +250,29 @@ export const NativePlayerLauncher: React.FC<CinemaPlayerProps> = (props) => {
       >
         <ArrowLeft className="w-5 h-5" />
       </button>
+      {picker && (
+        <div className="fixed inset-0 z-[310] flex items-end bg-black/70 md:items-center md:justify-center">
+          <div className="max-h-[80vh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl bg-[#10131B] p-4 md:max-w-xl md:rounded-3xl">
+            <h3 className="text-[16px] font-bold text-white">Choose quality / source</h3>
+            <p className="mb-3 text-[12px] text-zinc-500">{picker.loading ? 'Searching other sources…' : `${picker.streams.length} playable sources`} · continues at the same minute</p>
+            {picker.streams.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => picker.done(s)}
+                className={`mb-2 flex w-full min-w-0 items-start gap-3 rounded-xl p-3 text-left ring-1 ring-white/[0.06] ${s.url === picker.current ? 'bg-amber-400/20' : 'bg-white/[0.06] active:bg-white/15'}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="break-words text-[13px] font-semibold text-white [overflow-wrap:anywhere]">{s.label}</p>
+                  <p className="mt-0.5 text-[10.5px] text-zinc-500">{s.addon}{s.url === picker.current ? ' · playing now' : ''}</p>
+                </div>
+              </button>
+            ))}
+            <button onClick={() => picker.done(null)} className="mt-2 w-full rounded-xl bg-white/10 py-3 text-[14px] font-semibold text-white">
+              Keep current and resume
+            </button>
+          </div>
+        </div>
+      )}
       {failure ? (
         <>
           <p className="px-8 text-center text-sm text-rose-300 whitespace-pre-wrap break-words">{failure}</p>

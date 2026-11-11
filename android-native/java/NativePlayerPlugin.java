@@ -52,6 +52,7 @@ public class NativePlayerPlugin extends Plugin {
         Intent intent = new Intent(getContext(), VlcPlayerActivity.class);
         intent.putExtra("software", software != null && software);
         intent.putExtra("autoSubs", call.getBoolean("autoSubs", true));
+        intent.putExtra("quality", call.getBoolean("quality", false));
         String subLang = call.getString("subLang");
         if (subLang != null) intent.putExtra("subLang", subLang);
         intent.putExtra("items", items.toString());

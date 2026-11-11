@@ -93,6 +93,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
     private boolean finishedOnce = false;
     private boolean userSeeking = false;
     private boolean hardware = true;
+    private boolean canQuality = false;
     private boolean surfaceReady = false;
     private boolean started = false;
     private boolean playingSeen = false;
@@ -171,6 +172,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
             index = Math.max(0, Math.min(in.getIntExtra("index", 0), urls.size() - 1));
             pendingStart = Math.max(0L, in.getLongExtra("position", 0L));
             hardware = !in.getBooleanExtra("software", false);
+            canQuality = in.getBooleanExtra("quality", false);
             autoSubs = in.getBooleanExtra("autoSubs", true);
             String sl = in.getStringExtra("subLang");
             if (sl != null && !sl.isEmpty()) subLang = sl;
@@ -274,6 +276,13 @@ public class VlcPlayerActivity extends AppCompatActivity {
         speedBtn = action("\u25D4", "Playback Speed");
         speedBtn.setOnClickListener(v -> speedMenu());
         actions.addView(speedBtn, actionLp());
+        TextView qualityBtn = action("\u2699", "Quality");
+        qualityBtn.setOnClickListener(v -> {
+            if (!canQuality) { showHud("This video has a single quality"); return; }
+            requestIdx = -2; // the app shows the list of other sources, then reopens the player at this minute
+            finish();
+        });
+        actions.addView(qualityBtn, actionLp());
         aspectBtn = action("\u2922", "Video scaling");
         aspectBtn.setOnClickListener(v -> {
             aspectMode = (aspectMode + 1) % ASPECT.length;
@@ -324,6 +333,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
             opts.add("--no-skip-frames");
             opts.add("--network-caching=3000");
             opts.add("--audio-time-stretch");
+            opts.add("--freetype-rel-fontsize=" + getSharedPreferences("gw_player", MODE_PRIVATE).getInt("subRel", 16));
             libVlc = new LibVLC(this, opts);
             mp = new MediaPlayer(libVlc);
         } catch (Throwable t) {
@@ -526,7 +536,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
 
     private void subtitleMenu() {
         final String[] opts = {"Choose subtitle track", "Search online (" + langName(subLang) + ")",
-            "Search online – other language", "Subtitles off"};
+            "Search online – other language", "Subtitles off", "Subtitle size"};
         new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
             .setTitle("Subtitles")
             .setItems(opts, (d, which) -> {
@@ -539,7 +549,22 @@ public class VlcPlayerActivity extends AppCompatActivity {
                         .setTitle("Language")
                         .setItems(names, (d2, w2) -> searchSubs(codes[w2], false))
                         .show();
-                } else if (mp != null) mp.setSpuTrack(-1);
+                } else if (which == 3) { if (mp != null) mp.setSpuTrack(-1); }
+                else subtitleSizeMenu();
+            })
+            .show();
+    }
+
+    private void subtitleSizeMenu() {
+        final String[] names = {"Small", "Normal", "Large", "Extra large"};
+        final int[] rel = {22, 16, 12, 9};
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle("Subtitle size")
+            .setItems(names, (d, which) -> {
+                getSharedPreferences("gw_player", MODE_PRIVATE).edit().putInt("subRel", rel[which]).apply();
+                showHud("Applying…");
+                requestIdx = -3; // reopen the video at the same minute with the new size
+                finish();
             })
             .show();
     }
