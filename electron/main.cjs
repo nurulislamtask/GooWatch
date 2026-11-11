@@ -1,6 +1,6 @@
 // GooWatch Desktop — Electron main process.
 // Starts the original GooWatch backend locally and opens the original UI in a window.
-const { app, BrowserWindow, Menu, shell, dialog, Notification } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, Notification, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -92,6 +92,7 @@ async function boot() {
     show: false,
     webPreferences: {
       contextIsolation: true,
+      preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       autoplayPolicy: 'no-user-gesture-required',
     },
@@ -149,44 +150,51 @@ function setupAutoUpdate() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  let asking = false;
+  // The page shows a blocking "Updating GooWatch" screen (no way to skip it): the download starts by itself.
+  let ustate = { state: 'none', version: '', percent: 0, message: '' };
+  const push = () => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('gw-update', ustate);
+    } catch {}
+  };
+  const startDownload = () => {
+    ustate = { ...ustate, state: 'downloading', percent: 0, message: '' };
+    push();
+    autoUpdater.downloadUpdate().catch((e) => {
+      ustate = { ...ustate, state: 'error', message: String((e && e.message) || e) };
+      push();
+    });
+  };
+  ipcMain.on('gw-update-hello', push);
+  ipcMain.on('gw-update-start', () => {
+    if (ustate.state === 'available' || ustate.state === 'error') startDownload();
+  });
   autoUpdater.on('update-available', (info) => {
     try {
-      new Notification({
-        title: 'GooWatch update available',
-        body: `Version ${info.version} is ready to install.`,
-      }).show();
+      new Notification({ title: 'GooWatch is updating', body: `Version ${info.version} is downloading.` }).show();
     } catch {}
-    if (asking) return;
-    asking = true;
-    const opts = {
-      type: 'info',
-      buttons: ['Update now', 'Later'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'GooWatch update',
-      message: `A new version of GooWatch (${info.version}) is available.`,
-      detail: 'Download and install it now? GooWatch restarts when the update is done.',
-    };
-    (mainWindow ? dialog.showMessageBox(mainWindow, opts) : dialog.showMessageBox(opts))
-      .then((r) => {
-        if (r.response === 0) autoUpdater.downloadUpdate().catch(() => {});
-        else asking = false;
-      })
-      .catch(() => {
-        asking = false;
-      });
+    ustate = { state: 'available', version: info.version, percent: 0, message: '' };
+    push();
+    startDownload();
   });
   autoUpdater.on('download-progress', (p) => {
-    if (mainWindow) mainWindow.setProgressBar(Math.max(0, Math.min(1, (p.percent || 0) / 100)));
+    const pc = Math.max(0, Math.min(100, p.percent || 0));
+    if (mainWindow) mainWindow.setProgressBar(pc / 100);
+    ustate = { ...ustate, state: 'downloading', percent: pc };
+    push();
   });
   autoUpdater.on('update-downloaded', () => {
     if (mainWindow) mainWindow.setProgressBar(-1);
-    autoUpdater.quitAndInstall(true, true); // silent install, then reopen GooWatch
+    ustate = { ...ustate, state: 'ready', percent: 100 };
+    push();
+    setTimeout(() => autoUpdater.quitAndInstall(true, true), 600); // silent install, then reopen GooWatch
   });
-  autoUpdater.on('error', () => {
-    asking = false;
+  autoUpdater.on('error', (e) => {
     if (mainWindow) mainWindow.setProgressBar(-1);
+    if (ustate.state === 'downloading' || ustate.state === 'available') {
+      ustate = { ...ustate, state: 'error', message: String((e && e.message) || e || 'Download failed') };
+      push();
+    }
   });
 
   const check = () => autoUpdater.checkForUpdates().catch(() => {});

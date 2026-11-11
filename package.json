@@ -65,6 +65,7 @@
       "dist/**/*",
       "electron/main.cjs",
       "electron/server.cjs",
+      "electron/preload.cjs",
       "build/icon.png",
       "package.json"
     ],
