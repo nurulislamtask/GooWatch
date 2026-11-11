@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check, ChevronLeft, Gauge, Languages, List, Loader2, Maximize, Maximize2, Minimize, MonitorPlay, Pause, Play,
-  RotateCcw, RotateCw, SkipBack, SkipForward, Subtitles, Volume2, VolumeX, X,
+  RotateCcw, RotateCw, SkipBack, SlidersHorizontal, SkipForward, Subtitles, Volume2, VolumeX, X,
 } from 'lucide-react';
 import type { CinemaPlayerProps } from './CinemaPlayer';
 import type { ParsedFtpItem, PlayerEpisode } from '../utils/ftpParser';
 import { displayTitle } from '../utils/titleClean';
 import { playerEpisodeTitle } from '../mobile/episodeGuide';
-import { resolveEpisodeItem } from '../extensions/play';
+import { buildExtItem, resolveEpisodeItem } from '../extensions/play';
+import { fetchStreams } from '../extensions/client';
+import { getExtensions } from '../extensions/store';
+import type { ResolvedStream } from '../extensions/types';
 
 const RESUME_KEY = 'cineftp_resume_v1';
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -43,6 +46,8 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
   const hlsRef = useRef<any>(null);
   const hideT = useRef<number>(0);
   const panelOpen = useRef(false);
+  const retries = useRef(0);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const isHls = /\.m3u8(\?|$)/i.test(video.url);
   const [mode, setMode] = useState<'direct' | 'transcode'>('direct');
@@ -58,7 +63,7 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
   const [speed, setSpeed] = useState(1);
   const [full, setFull] = useState(false);
   const [bars, setBars] = useState(true);
-  const [menu, setMenu] = useState<null | 'audio' | 'subs' | 'speed' | 'scale' | 'player'>(null);
+  const [menu, setMenu] = useState<null | 'audio' | 'subs' | 'speed' | 'scale' | 'player' | 'quality'>(null);
   const [panel, setPanel] = useState(false);
   const [panelSeason, setPanelSeason] = useState(1);
   const [scale, setScale] = useState<Scale>('contain');
@@ -75,6 +80,14 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
   const [subBusy, setSubBusy] = useState(false);
   const [subLang, setSubLang] = useState(() => { try { return localStorage.getItem('cineftp_sub_lang') || 'eng'; } catch { return 'eng'; } });
   const [subDelay, setSubDelay] = useState(0);
+  const [subSize, setSubSize] = useState<number>(() => { try { return parseInt(localStorage.getItem('goowatch_sub_size') || '', 10) || 100; } catch { return 100; } });
+  const [qStreams, setQStreams] = useState<ResolvedStream[]>([]);
+  const [qBusy, setQBusy] = useState(false);
+  const changeSubSize = (v: number) => {
+    const n = Math.max(50, Math.min(300, v));
+    setSubSize(n);
+    try { localStorage.setItem('goowatch_sub_size', String(n)); } catch { /* ignore */ }
+  };
   const startRef = useRef(initialStartTime || readSaved(video.id));
 
   const rows: EpRow[] = useMemo(() => {
@@ -160,7 +173,12 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
           });
           h.on(Hls.Events.AUDIO_TRACKS_UPDATED, () =>
             setHlsAudios(h.audioTracks.map((a: any, i: number) => ({ id: i, label: a.name || a.lang || `Audio ${i + 1}` }))));
-          h.on(Hls.Events.ERROR, (_e: any, d: any) => { if (d.fatal) setError('This stream could not be loaded.'); });
+          h.on(Hls.Events.ERROR, (_e: any, d: any) => {
+            if (!d.fatal) return;
+            if (d.type === Hls.ErrorTypes.NETWORK_ERROR && retries.current < 6) { retries.current += 1; h.startLoad(); return; }
+            if (d.type === Hls.ErrorTypes.MEDIA_ERROR && retries.current < 6) { retries.current += 1; h.recoverMediaError(); return; }
+            setError('This stream could not be loaded.');
+          });
         } else { el.src = srcUrl; begin(); }
       });
     } else {
@@ -169,7 +187,9 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
       el.addEventListener('loadedmetadata', begin, { once: true });
     }
     return () => { dead = true; el.removeEventListener('loadedmetadata', begin); };
-  }, [srcUrl]);
+  }, [srcUrl, reloadKey]);
+
+  useEffect(() => { retries.current = 0; }, [video.id]);
 
   // ---- probe audio tracks (needs the local backend)
   useEffect(() => {
@@ -258,7 +278,20 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
       on('volumechange', () => { setVol(el.volume); setMuted(el.muted); }),
       on('ended', () => { if (nextRef.current) pickRef.current(nextRef.current); }),
       on('error', () => {
-        if (!isHls && mode === 'direct') { setMode('transcode'); return; }
+        // a hiccup in the middle of a film must NOT restart it: reconnect at the same place first
+        const at = mode === 'transcode' ? offset + el.currentTime : el.currentTime;
+        if (!isHls && at > 3 && retries.current < 4) {
+          retries.current += 1;
+          startRef.current = at;
+          if (mode === 'transcode') setOffset(Math.floor(at));
+          setReloadKey((k) => k + 1);
+          return;
+        }
+        if (!isHls && mode === 'direct') {
+          setOffset(Math.floor(at)); // transcode continues from the same place
+          setMode('transcode');
+          return;
+        }
         setError('This file could not be played.');
       }),
     ];
@@ -270,6 +303,35 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
     const t = window.setInterval(() => { if (cur > 0) saveResume(video.id, cur, dur); }, 4000);
     return () => { window.clearInterval(t); if (cur > 0) saveResume(video.id, cur, dur); };
   }, [cur, dur, video.id]);
+
+  // other qualities of this title (other add-on streams), looked up when the Quality menu opens
+  useEffect(() => {
+    if (menu !== 'quality' || !video.extType || !video.extVideoId) return;
+    let alive = true;
+    setQBusy(true);
+    setQStreams([]);
+    fetchStreams(getExtensions(), video.extType, video.extVideoId, (all) => {
+      if (alive) setQStreams(all.filter((s) => s.playable && s.url).slice(0, 40));
+    })
+      .catch(() => {})
+      .finally(() => alive && setQBusy(false));
+    return () => { alive = false; };
+  }, [menu, video.extVideoId]);
+
+  const switchStream = (s: ResolvedStream) => {
+    if (!video.extType || !video.extVideoId) return;
+    setMenu(null);
+    startRef.current = cur; // continue at the same minute
+    retries.current = 0;
+    onSelectVideo(
+      buildExtItem({
+        title: video.cleanTitle || video.rawName, type: video.extType, videoId: video.extVideoId,
+        season: video.season, episode: video.episode, epTitle: video.epTitle, year: video.year,
+        poster: video.posterUrl, background: video.backdropUrl, stream: s, guide: video.episodeGuide,
+        extraSubs: video.streamSubs,
+      })
+    );
+  };
 
   // ---- controls
   const toggle = useCallback(() => { const el = vref.current; if (!el) return; el.paused ? el.play().catch(() => {}) : el.pause(); }, []);
@@ -367,6 +429,7 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
       onMouseMove={poke}
       onClick={() => { setMenu(null); }}
     >
+      <style>{`video::cue{font-size:${subSize}%;background:rgba(0,0,0,.62);color:#fff;text-shadow:0 1px 3px #000}`}</style>
       <video ref={vref} className={`h-full w-full ${objFit}`} playsInline onClick={(e) => { e.stopPropagation(); if (panel) setPanel(false); else toggle(); }} onDoubleClick={toggleFull}>
         {subUrl && <track key={subUrl} kind="subtitles" src={subUrl} srcLang={subLang} label="Subtitles" default />}
       </video>
@@ -445,6 +508,14 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
                 </div>
                 <button onClick={() => { setSubSel('off'); setMenu(null); }} className={item(subSel === 'off')}>Off{subSel === 'off' && <Check className="h-4 w-4" />}</button>
                 {subs.map((s) => (<button key={s.id} onClick={() => { setSubSel(s.id); setMenu(null); }} className={item(subSel === s.id)}><span className="truncate">{s.label}</span>{subSel === s.id && <Check className="h-4 w-4 shrink-0" />}</button>))}
+                <div className="mt-1 flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-[12px] text-zinc-200">
+                  <span>Size {subSize}%</span>
+                  <span className="flex gap-1">
+                    <button onClick={() => changeSubSize(subSize - 15)} className="rounded bg-white/10 px-2.5 py-0.5 text-[14px] font-bold">A−</button>
+                    <button onClick={() => changeSubSize(100)} className="rounded bg-white/10 px-2 py-0.5">Reset</button>
+                    <button onClick={() => changeSubSize(subSize + 15)} className="rounded bg-white/10 px-2.5 py-0.5 text-[14px] font-bold">A+</button>
+                  </span>
+                </div>
                 {subSel !== 'off' && (
                   <div className="mt-1 flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-[12px] text-zinc-200">
                     <span>Delay {subDelay > 0 ? '+' : ''}{subDelay.toFixed(1)}s</span>
@@ -481,6 +552,42 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
           </div>
 
           <div className="relative">
+            <button onClick={() => setMenu(menu === 'quality' ? null : 'quality')} className={act(menu === 'quality')}>
+              <SlidersHorizontal className="h-5 w-5" /> Quality{level >= 0 && hlsLevels[level] ? ` (${hlsLevels[level].label})` : ''}
+            </button>
+            {menu === 'quality' && (
+              <div className={`${pop} max-h-80 w-80`}>
+                {hlsLevels.length > 1 && (
+                  <>
+                    <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500">Stream quality</p>
+                    <button onClick={() => { setLevel(-1); if (hlsRef.current) hlsRef.current.currentLevel = -1; setMenu(null); }} className={item(level < 0)}>Auto{level < 0 && <Check className="h-4 w-4" />}</button>
+                    {hlsLevels.map((l) => (<button key={l.id} onClick={() => { setLevel(l.id); if (hlsRef.current) hlsRef.current.currentLevel = l.id; setMenu(null); }} className={item(level === l.id)}>{l.label}{level === l.id && <Check className="h-4 w-4" />}</button>))}
+                  </>
+                )}
+                {video.extType && (
+                  <>
+                    <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-zinc-500">Other sources {qBusy ? '· searching…' : `· ${qStreams.length}`}</p>
+                    {qStreams.map((s) => {
+                      const on = s.url === video.url;
+                      return (
+                        <button key={s.key} onClick={() => !on && switchStream(s)} className={item(on)}>
+                          <span className="min-w-0 flex-1 text-left">
+                            <span className="block truncate">{s.label}</span>
+                            <span className={`block truncate text-[10.5px] ${on ? 'text-black/60' : 'text-zinc-500'}`}>{s.addon}</span>
+                          </span>
+                          {on && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                    {!qBusy && qStreams.length === 0 && <p className="px-3 py-2 text-[12px] text-zinc-400">No other playable sources found.</p>}
+                  </>
+                )}
+                {!video.extType && hlsLevels.length <= 1 && <p className="px-3 py-2 text-[12px] text-zinc-400">This file has a single quality.</p>}
+              </div>
+            )}
+          </div>
+
+          <div className="relative">
             <button onClick={() => setMenu(menu === 'scale' ? null : 'scale')} className={act(menu === 'scale')}><Maximize2 className="h-5 w-5" /> Video scaling</button>
             {menu === 'scale' && (
               <div className={`${pop} w-44`}>
@@ -499,13 +606,6 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
                 </div>
                 <button onClick={() => { pip(); setMenu(null); }} className={item(false)}>Picture in picture</button>
                 <button onClick={() => { toggleFull(); setMenu(null); }} className={item(false)}>{full ? 'Exit fullscreen' : 'Fullscreen'}</button>
-                {hlsLevels.length > 1 && (
-                  <>
-                    <p className="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">Quality</p>
-                    <button onClick={() => { setLevel(-1); if (hlsRef.current) hlsRef.current.currentLevel = -1; setMenu(null); }} className={item(level < 0)}>Auto{level < 0 && <Check className="h-4 w-4" />}</button>
-                    {hlsLevels.map((l) => (<button key={l.id} onClick={() => { setLevel(l.id); if (hlsRef.current) hlsRef.current.currentLevel = l.id; setMenu(null); }} className={item(level === l.id)}>{l.label}{level === l.id && <Check className="h-4 w-4" />}</button>))}
-                  </>
-                )}
               </div>
             )}
           </div>

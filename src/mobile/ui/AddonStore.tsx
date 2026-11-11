@@ -69,12 +69,19 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
     return (all || [])
-      .filter((a) => matches(a, filter) && (showDebrid || !a.needsDebrid) && (!t || (a.name + ' ' + a.description).toLowerCase().includes(t)))
-      .sort((a, b) => Number(a.needsDebrid) - Number(b.needsDebrid));
+      .filter((a) => matches(a, filter) && (showDebrid || (!a.needsDebrid && !a.needsSetup)) && (!t || (a.name + ' ' + a.description).toLowerCase().includes(t)))
+      .sort((a, b) => Number(a.needsDebrid || a.needsSetup) - Number(b.needsDebrid || b.needsSetup) || Number(b.resources.includes('stream')) - Number(a.resources.includes('stream')));
   }, [all, q, filter, showDebrid]);
 
-  const Btn: React.FC<{ name: string; url: string; manifest?: any }> = ({ name, url, manifest }) =>
-    isInstalled(url) ? (
+  const Btn: React.FC<{ name: string; url: string; manifest?: any; setup?: boolean }> = ({ name, url, manifest, setup }) =>
+    setup && !isInstalled(url) ? (
+      <button
+        onClick={() => window.open(url.replace(/\/manifest\.json.*$/i, '') + '/configure', '_blank')}
+        className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-[13px] font-bold text-white active:scale-95"
+      >
+        Set up
+      </button>
+    ) : isInstalled(url) ? (
       <span className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-500/15 px-3 py-2 text-[12.5px] font-bold text-emerald-300">
         <Check className="h-4 w-4" /> Installed
       </span>
@@ -135,7 +142,7 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
 
         {/* full collection */}
-        <h2 className="mb-2 mt-7 text-[12px] font-bold uppercase tracking-wider text-zinc-500">All add-ons{all ? ` · ${list.length}` : ''}</h2>
+        <h2 className="mb-2 mt-7 text-[12px] font-bold uppercase tracking-wider text-zinc-500">Free add-ons · no account needed{all ? ` · ${list.length}` : ''}</h2>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
           <input
@@ -154,8 +161,13 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </div>
         <label className="mt-3 flex items-center gap-2 text-[12.5px] text-zinc-400">
           <input type="checkbox" checked={showDebrid} onChange={(e) => setShowDebrid(e.target.checked)} className="accent-amber-400" />
-          Also show torrent / debrid add-ons (they need a debrid account to play)
+          Also show add-ons that need setup or a paid / debrid account
         </label>
+
+        <p className="mt-3 rounded-xl bg-white/[0.04] p-3 text-[12px] leading-relaxed text-zinc-400">
+          Add-ons marked <b className="text-zinc-200">Needs setup</b> must be configured once on their own page: press <b className="text-zinc-200">Set up</b>, choose your options, then press the
+          page's <b className="text-zinc-200">Install</b> button — GooWatch opens and installs your configured copy. You only do this once.
+        </p>
 
         {!all && !err && (
           <div className="flex items-center gap-3 py-10 text-zinc-400">
@@ -169,11 +181,14 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <div key={a.id} className="flex min-w-0 items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.06]">
               <Logo src={a.logo} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-bold text-white">{a.name}</p>
+                <p className="truncate text-[14px] font-bold text-white">
+                  {a.name}
+                  {(a.needsSetup || a.needsDebrid) && <span className="ml-1.5 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-zinc-300">{a.needsDebrid ? 'Account needed' : 'Needs setup'}</span>}
+                </p>
                 <p className="line-clamp-2 text-[12px] text-zinc-400">{a.description || a.resources.join(' · ')}</p>
                 <p className="mt-0.5 truncate text-[10.5px] capitalize text-zinc-600">{[...new Set([...a.types, ...a.resources])].slice(0, 5).join(' · ')}</p>
               </div>
-              <Btn name={a.name} url={a.manifestUrl} manifest={a.manifest} />
+              <Btn name={a.name} url={a.manifestUrl} manifest={a.manifest} setup={a.needsSetup} />
             </div>
           ))}
         </div>

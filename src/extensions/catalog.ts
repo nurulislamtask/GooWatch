@@ -11,6 +11,8 @@ export interface CatalogAddon {
   version?: string;
   /** needs a torrent / debrid service to actually play */
   needsDebrid: boolean;
+  /** must be configured on the add-on's own page first (key / account / options) */
+  needsSetup: boolean;
   note?: string;
   manifest?: any;
 }
@@ -19,7 +21,7 @@ export const STORE_EVENT = 'goowatch-open-store';
 export const openAddonStore = () => window.dispatchEvent(new Event(STORE_EVENT));
 
 /** Hand-picked add-ons shown first (always available, even offline). */
-export const RECOMMENDED: (Omit<CatalogAddon, 'id' | 'resources' | 'needsDebrid'> & { why: string; debrid?: boolean })[] = [
+export const RECOMMENDED: (Omit<CatalogAddon, 'id' | 'resources' | 'needsDebrid' | 'needsSetup'> & { why: string; debrid?: boolean })[] = [
   { name: 'Cinemeta', manifestUrl: 'https://v3-cinemeta.strem.io/manifest.json', description: 'Movie & series catalogs, posters, episodes and ratings.', types: ['movie', 'series'], why: 'Built in' },
   { name: 'Kitsu Anime', manifestUrl: 'https://anime-kitsu.strem.fun/manifest.json', description: 'Anime catalogs and episode lists.', types: ['anime'], why: 'Built in' },
   { name: 'OpenSubtitles', manifestUrl: 'https://opensubtitles-v3.strem.io/manifest.json', description: 'Subtitles in many languages for every title.', types: ['subtitles'], why: 'Best subtitles' },
@@ -30,7 +32,7 @@ export const RECOMMENDED: (Omit<CatalogAddon, 'id' | 'resources' | 'needsDebrid'
   { name: 'Torrentio', manifestUrl: 'https://torrentio.strem.fun/manifest.json', description: 'Torrent streams. Needs a debrid service to play.', types: ['movie', 'series', 'anime'], why: 'Needs debrid', debrid: true },
 ];
 
-const DEBRID = /torrent|debrid|real-?debrid|premiumize|all-?debrid|magnet/i;
+const DEBRID = /torrent|debrid|real-?debrid|premiumize|all-?debrid|magnet|premium account|subscription|api ?key|login required|paid/i;
 
 let memo: { t: number; list: CatalogAddon[] } | null = null;
 
@@ -57,6 +59,7 @@ export async function fetchAddonCollection(): Promise<CatalogAddon[]> {
       manifestUrl: url,
       version: m.version,
       needsDebrid: DEBRID.test(text) && !resources.includes('catalog'),
+      needsSetup: !!m.behaviorHints?.configurationRequired,
       manifest: m,
     });
   }

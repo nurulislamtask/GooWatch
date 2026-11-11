@@ -1,3 +1,4 @@
+import { extUrl } from './addr';
 import { ExtCatalog, ExtManifest, ExtMeta, ExtPreview, ExtStream, InstalledExt, ResolvedStream } from './types';
 import { getJson } from './http';
 import { imdbToTmdb, NuvioStream, runScraper } from './nuvio';
@@ -63,7 +64,7 @@ export async function fetchCatalog(
   if (opts?.genre) parts.push(`genre=${encodeURIComponent(opts.genre)}`);
   if (opts?.skip) parts.push(`skip=${opts.skip}`);
   const extra = parts.length ? `/${parts.join('&')}` : '';
-  const r = await getJson<{ metas?: any[] }>(`${ext.base}/catalog/${c.type}/${encodeURIComponent(c.id)}${extra}.json`);
+  const r = await getJson<{ metas?: any[] }>(extUrl(ext, `/catalog/${c.type}/${encodeURIComponent(c.id)}${extra}.json`));
   return (r.metas || []).map((o) => toPreview(o, ext, c.type)).filter(Boolean) as ExtPreview[];
 }
 
@@ -73,7 +74,7 @@ export async function fetchMeta(exts: InstalledExt[], type: string, id: string, 
     .sort((a, b) => (a.base === preferBase ? -1 : b.base === preferBase ? 1 : 0));
   for (const e of list) {
     try {
-      const r = await getJson<{ meta?: ExtMeta }>(`${e.base}/meta/${type}/${encodeURIComponent(id)}.json`, 10 * 60 * 1000);
+      const r = await getJson<{ meta?: ExtMeta }>(extUrl(e, `/meta/${type}/${encodeURIComponent(id)}.json`), 10 * 60 * 1000);
       if (r.meta && r.meta.name) return r.meta;
     } catch {
       /* try the next extension */
@@ -169,7 +170,7 @@ export async function fetchStreams(
 
   const jobs: Promise<void>[] = stremio.map(async (e) => {
     try {
-      const r = await getJson<{ streams?: ExtStream[] }>(`${e.base}/stream/${type}/${encodeURIComponent(videoId)}.json`, 2 * 60 * 1000, 20000);
+      const r = await getJson<{ streams?: ExtStream[] }>(extUrl(e, `/stream/${type}/${encodeURIComponent(videoId)}.json`), 2 * 60 * 1000, 20000);
       (r.streams || []).forEach((s, i) => all.push(resolve(e, s, i)));
     } catch {
       /* this extension did not answer */
@@ -229,7 +230,7 @@ export async function fetchExtSubtitles(exts: InstalledExt[], type: string, id: 
     list.map(async (e) => {
       try {
         const r = await getJson<{ subtitles?: { url: string; lang?: string; id?: string }[] }>(
-          `${e.base}/subtitles/${type}/${encodeURIComponent(id)}.json`, 10 * 60 * 1000, 15000);
+          extUrl(e, `/subtitles/${type}/${encodeURIComponent(id)}.json`), 10 * 60 * 1000, 15000);
         (r.subtitles || []).slice(0, 12).forEach((s) => s.url && out.push({ url: s.url, label: `${s.lang || 'Subtitle'} (${e.manifest.name})` }));
       } catch {
         /* ignore */

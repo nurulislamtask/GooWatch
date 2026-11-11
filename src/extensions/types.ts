@@ -23,10 +23,12 @@ export interface ExtManifest {
   idPrefixes?: string[];
   resources?: (string | ExtResourceObj)[];
   catalogs?: ExtCatalog[];
+  behaviorHints?: { configurable?: boolean; configurationRequired?: boolean; p2p?: boolean; adult?: boolean };
 }
 export interface InstalledExt {
   kind?: 'stremio' | 'nuvio';
   base: string; // address without /manifest.json (nuvio: raw folder ending with /)
+  query?: string; // configuration kept in the address (?config=…) — sent with every request
   manifest: ExtManifest;
   scrapers?: import('./nuvio').NuvioScraper[];
   enabled: boolean;

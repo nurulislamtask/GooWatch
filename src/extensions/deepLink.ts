@@ -10,7 +10,8 @@ export function parseInstallLink(link: string): string | null {
   const scheme = m[1].toLowerCase();
   let rest = m[2];
   // ?url=… / ?repo=… / ?addon=… form
-  const q = rest.match(/[?&](?:url|repo|addon|manifest|u)=([^&#]+)/i);
+  // only the wrapper forms (goowatch://install?url=…) carry the address in a parameter; a real add-on's own ?config=… stays untouched
+  const q = /^(install\/?)?\?/i.test(rest) ? rest.match(/[?&](?:url|repo|addon|manifest|u)=([^&#]+)/i) : null;
   if (q) {
     let v = q[1];
     try {

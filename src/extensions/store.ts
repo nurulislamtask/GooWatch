@@ -26,6 +26,8 @@ export function normalizeBase(input: string): string {
   return u;
 }
 
+import { addrQuery, withQuery } from './addr';
+
 let state: InstalledExt[] | null = null;
 const listeners = new Set<() => void>();
 
@@ -76,7 +78,7 @@ export async function installExtension(input: string, builtin = false, known?: E
   // 0) the add-on store already knows this manifest: install instantly, no network needed
   if (known && known.id && known.name && !/^https?:\/\/github\.com\//i.test(raw)) {
     const kbase = normalizeBase(raw);
-    const k: InstalledExt = { kind: 'stremio', base: kbase, manifest: known, enabled: true, builtin };
+    const k: InstalledExt = { kind: 'stremio', base: kbase, query: addrQuery(raw) || undefined, manifest: known, enabled: true, builtin };
     const ki = list.findIndex((e) => e.base === kbase || e.manifest.id === known.id);
     if (ki >= 0) list[ki] = { ...k, enabled: list[ki].enabled };
     else list.push(k);
@@ -88,9 +90,10 @@ export async function installExtension(input: string, builtin = false, known?: E
   if (!/github\.com\//i.test(raw) && !/raw\.githubusercontent\.com/i.test(raw)) {
     try {
       const b0 = normalizeBase(raw);
-      const m0: any = await getJson(`${b0}/manifest.json`, 0, 12000);
+      const q0 = addrQuery(raw);
+      const m0: any = await getJson(withQuery(`${b0}/manifest.json`, q0), 0, 12000);
       if (m0 && m0.id && m0.name && !looksLikeCloudStream(m0) && !Array.isArray(m0.scrapers)) {
-        const e0: InstalledExt = { kind: 'stremio', base: b0, manifest: m0 as ExtManifest, enabled: true, builtin };
+        const e0: InstalledExt = { kind: 'stremio', base: b0, query: q0 || undefined, manifest: m0 as ExtManifest, enabled: true, builtin };
         const i0 = list.findIndex((e) => e.base === b0 || e.manifest.id === m0.id);
         if (i0 >= 0) list[i0] = { ...e0, enabled: list[i0].enabled };
         else list.push(e0);
@@ -128,10 +131,11 @@ export async function installExtension(input: string, builtin = false, known?: E
 
   // 2) Stremio add-on
   const base = normalizeBase(raw);
+  const query = addrQuery(raw);
   let manifest: ExtManifest | null = null;
   let probe: any = null;
   try {
-    probe = await getJson(`${base}/manifest.json`, 0, 12000);
+    probe = await getJson(withQuery(`${base}/manifest.json`, query), 0, 12000);
   } catch {
     try {
       probe = await getJson(raw.replace(/^stremio:\/\//i, 'https://'), 0, 12000);
@@ -147,7 +151,7 @@ export async function installExtension(input: string, builtin = false, known?: E
   if (probe && probe.id && probe.name) manifest = probe as ExtManifest;
   if (!manifest) throw new Error('This address is not a Stremio add-on or a Nuvio provider repository');
   const i = list.findIndex((e) => e.base === base || e.manifest.id === manifest!.id);
-  const ext: InstalledExt = { kind: 'stremio', base, manifest, enabled: true, builtin };
+  const ext: InstalledExt = { kind: 'stremio', base, query: query || undefined, manifest, enabled: true, builtin };
   if (i >= 0) list[i] = { ...ext, enabled: list[i].enabled };
   else list.push(ext);
   save();
@@ -187,7 +191,7 @@ export async function previewExtension(input: string): Promise<ExtPreviewInfo> {
   const base = normalizeBase(raw);
   let probe: any = null;
   try {
-    probe = await getJson(`${base}/manifest.json`, 0, 12000);
+    probe = await getJson(withQuery(`${base}/manifest.json`, addrQuery(raw)), 0, 12000);
   } catch (e: any) {
     throw new Error(`Could not open this address (${e?.message || 'network error'})`);
   }

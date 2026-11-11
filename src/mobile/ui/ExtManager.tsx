@@ -90,6 +90,14 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 <p className="truncate text-[14px] font-semibold text-white">
                   {e.manifest.name} <span className="text-[11px] font-normal text-zinc-500">{e.kind === 'nuvio' ? 'Nuvio' : 'Stremio'} {e.manifest.version || ''}</span>
                 </p>
+                {e.manifest.behaviorHints?.configurable && (
+                  <button
+                    onClick={() => window.open(`${e.base}/configure`, '_blank')}
+                    className="mb-0.5 mt-0.5 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-200 active:scale-95"
+                  >
+                    {e.manifest.behaviorHints?.configurationRequired && !e.query && !/^[^/]+\/.+/.test(e.base.replace(/^https?:\/\//, '')) ? '⚠ Set up (needed)' : 'Configure'}
+                  </button>
+                )}
                 <p className="line-clamp-2 text-[11.5px] text-zinc-500">
                   {(e.manifest.resources || []).map((r) => (typeof r === 'string' ? r : r.name)).filter((v, i, a) => a.indexOf(v) === i).join(' · ')}
                   {e.manifest.description ? ` — ${e.manifest.description}` : ''}
