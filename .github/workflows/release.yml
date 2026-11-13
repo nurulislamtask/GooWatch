@@ -1,4 +1,4 @@
-name: Release (Windows installer + Android APK)
+name: Release (Windows installer + Linux + Android APK)
 
 # Every time you commit to the main branch (upload / edit files on github.com), this builds
 # the Windows installer + the Android APK and puts them on the "Releases" page as version 1.0.<N>.
@@ -72,6 +72,40 @@ jobs:
           git commit -q -m "windows build log"
           git push -f origin ci-logs
 
+  linux:
+    needs: [version, windows]
+    if: ${{ needs.windows.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --legacy-peer-deps --no-audit --no-fund
+      - run: npm run desktop:prepare
+        env:
+          APP_VERSION: ${{ needs.version.outputs.v }}
+      - name: Build + upload AppImage and .deb to the release
+        shell: bash
+        run: |
+          set -o pipefail
+          npx electron-builder --linux --x64 --publish always "-c.extraMetadata.version=${{ needs.version.outputs.v }}" "-c.publish.repo=${{ needs.windows.outputs.repo }}" 2>&1 | tee linux-build.log
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Save Linux build log on failure (branch ci-logs-linux)
+        if: failure()
+        shell: bash
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git checkout --orphan ci-logs-linux
+          git rm -rf --quiet . || true
+          tail -n 200 linux-build.log > ../l.log 2>/dev/null || true
+          mv ../l.log linux-build.log 2>/dev/null || echo "no log" > linux-build.log
+          git add linux-build.log
+          git commit -q -m "linux build log"
+          git push -f origin ci-logs-linux
+
   android:
     needs: [version, windows]
     if: ${{ needs.windows.result == 'success' }}
@@ -128,7 +162,7 @@ jobs:
 
   # keep ONE release only: the newest one
   cleanup:
-    needs: [version, windows, android]
+    needs: [version, windows, linux, android]
     if: success()
     runs-on: ubuntu-latest
     steps:

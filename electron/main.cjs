@@ -2,6 +2,9 @@
 // Starts the original GooWatch backend locally and opens the original UI in a window.
 const { app, BrowserWindow, Menu, shell, dialog, Notification, ipcMain } = require('electron');
 const path = require('path');
+
+// Linux: AppImage / newer Ubuntu block Chromium's sandbox helper, which would stop the app from opening at all.
+if (process.platform === 'linux') app.commandLine.appendSwitch('no-sandbox');
 const fs = require('fs');
 
 // A fixed port keeps the app's saved data (localStorage: servers, settings, history)

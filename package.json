@@ -93,6 +93,25 @@
       "icon": "build/icon.ico",
       "artifactName": "GooWatch-Setup-${version}.exe"
     },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "icon": "build/icon.png",
+      "category": "AudioVideo",
+      "executableName": "goowatch",
+      "maintainer": "GooWatch <noreply@users.noreply.github.com>",
+      "synopsis": "Movies, series and anime with extensions",
+      "artifactName": "GooWatch-${version}-linux.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "GooWatch",
+          "Comment": "Movies, Series & Anime — with Extensions",
+          "StartupWMClass": "GooWatch"
+        }
+      }
+    },
     "nsis": {
       "oneClick": false,
       "perMachine": false,
