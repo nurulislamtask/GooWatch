@@ -5,6 +5,7 @@ import { catalogGenres, fetchCatalog, homeCatalogs } from '../../extensions/clie
 import { useExtensions } from '../../extensions/store';
 import { useRatings } from '../../services/ratings';
 import { RatingBadge } from './RatingBadge';
+import { useTopSeen } from '../homeSeen';
 import { allowExt, allowExtItem, useContentMode } from '../safety';
 import { usePrefs } from '../prefs';
 
@@ -29,7 +30,6 @@ export const ExtCard: React.FC<{ item: ExtPreview; onOpen: (p: ExtPreview) => vo
           <div className="flex h-full items-center justify-center p-2 text-center text-[12px] text-zinc-500">{item.name}</div>
         )}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/60 to-transparent" />
-        <RatingBadge r={r} className="absolute bottom-1.5 right-1.5 flex-col items-end gap-0.5" />
         {rank ? (
           <span className="absolute left-1.5 top-1 text-[34px] font-black leading-none text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]" style={{ WebkitTextStroke: '1.5px #fbbf24' }}>
             {rank}
@@ -37,6 +37,9 @@ export const ExtCard: React.FC<{ item: ExtPreview; onOpen: (p: ExtPreview) => vo
         ) : null}
       </div>
       <p className="mt-1.5 truncate text-[12.5px] font-medium text-zinc-100">{item.name}</p>
+      <div className="mt-0.5 h-[16px]">
+        <RatingBadge r={r} />
+      </div>
       {item.year && <p className="text-[11px] text-zinc-500">{item.year}</p>}
     </button>
   );
@@ -91,10 +94,12 @@ export const ExtRows: React.FC<{ onOpen: (p: ExtPreview) => void }> = ({ onOpen 
     };
   }, [jobs, mode]);
 
+  const seen = new Set<string>(useTopSeen());
   return (
     <>
       {prefs.extensionsOn && jobs.map((j) => {
-        const list = (data[j.key] || []).filter((it) => allowExtItem(it, mode, mode === 'kids'));
+        const list = (data[j.key] || []).filter((it) => allowExtItem(it, mode, mode === 'kids') && !seen.has(it.id));
+        list.forEach((it) => seen.add(it.id));
         return list.length ? (
           <Row key={j.key} title={j.title} subtitle={`Extension: ${j.subtitle}`}>
             {list.map((it) => (

@@ -83,7 +83,6 @@ export const MobilePoster: React.FC<Props> = memo(({ item, onOpen, saved, onTogg
               </span>
             )}
           </div>
-          <RatingBadge r={rating} className="absolute bottom-1.5 right-1.5 flex-col items-end gap-0.5" />
           {isSeries && (
             <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300 backdrop-blur">
               SERIES
@@ -91,6 +90,9 @@ export const MobilePoster: React.FC<Props> = memo(({ item, onOpen, saved, onTogg
           )}
         </div>
         <p className="mt-1.5 truncate text-[12.5px] font-medium text-zinc-100">{title}</p>
+        <div className="mt-0.5 h-[16px]">
+          <RatingBadge r={rating} />
+        </div>
         <p className="truncate text-[11px] text-zinc-500">
           {year || ''}
           {year && (item.quality || '') ? ' · ' : ''}

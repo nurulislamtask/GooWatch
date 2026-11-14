@@ -23,6 +23,7 @@ import { IS_CAPACITOR } from '../../utils/platform';
 import { NativePlayer } from '../nativePlayer';
 import { useInstallLinks } from '../../extensions/deepLink';
 import { ShellApi, Tab } from './types';
+import { AskHost } from './AskDialog';
 
 export interface MobileShellProps {
   sources: AppSource[];
@@ -122,7 +123,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   }, []);
 
   return (
-    <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100 md:pb-10 md:pl-[232px]" style={{ WebkitOverflowScrolling: 'touch', paddingTop: 'env(safe-area-inset-top)' }}>
+    <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100 md:pb-10 md:pl-[232px]" style={{ WebkitOverflowScrolling: 'touch' }}>
       {tab === 'home' && <HomeTab api={api} prefs={prefs} scanning={lib.scanning} progress={lib.progress} />}
       {tab === 'discover' && <DiscoverTab api={api} />}
       {tab === 'list' && <ListTab api={api} />}
@@ -184,6 +185,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
         </div>
       )}
 
+      <AskHost />
       {!props.playerOpen && <BottomNav tab={tab} onChange={changeTab} />}
     </div>
   );

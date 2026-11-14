@@ -34,7 +34,8 @@ let state: InstalledExt[] | null = null;
 export function hasConfig(e: { base: string; query?: string }): boolean {
   if (e.query) return true;
   try {
-    return new URL(e.base).pathname.replace(/\/+$/, '').length > 1 && /[=|%]/.test(new URL(e.base).pathname);
+    // anything after the host (e.g. /realdebrid=KEY, or a base64 blob) is the add-on's own settings
+    return new URL(e.base).pathname.replace(/\/+$/, '').length > 1;
   } catch {
     return false;
   }

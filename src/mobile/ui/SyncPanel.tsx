@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Check, Copy, Loader2, RefreshCw } from 'lucide-react';
-import { createSync, joinSync, leaveSync, syncNow, useSyncStatus } from '../../sync/sync';
+import { createSync, joinSync, leaveSync, syncCode, syncNow, useSyncStatus } from '../../sync/sync';
 
 const btn = 'rounded-xl px-4 py-2.5 text-[13px] font-extrabold active:scale-95 disabled:opacity-50';
 
@@ -17,7 +17,8 @@ function ago(ts?: number) {
 export const SyncPanel: React.FC = () => {
   const { status, cfg } = useSyncStatus();
   const [code, setCode] = useState('');
-  const [open, setOpen] = useState<'' | 'join'>('');
+  const [open, setOpen] = useState<'' | 'join' | 'create'>('');
+  const [token, setToken] = useState('');
   const [err, setErr] = useState('');
   const [copied, setCopied] = useState(false);
   const [show, setShow] = useState(false);
@@ -26,7 +27,9 @@ export const SyncPanel: React.FC = () => {
   const create = async () => {
     setErr('');
     try {
-      await createSync();
+      await createSync(token);
+      setToken('');
+      setOpen('');
     } catch (e: any) {
       setErr(e?.message || 'Could not start sync');
     }
@@ -44,7 +47,7 @@ export const SyncPanel: React.FC = () => {
   const copy = async () => {
     if (!cfg) return;
     try {
-      await navigator.clipboard.writeText(cfg.id);
+      await navigator.clipboard.writeText(syncCode(cfg));
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -60,13 +63,47 @@ export const SyncPanel: React.FC = () => {
           Your progress, Continue Watching and My List stay in step on your phone, tablet and PC. Create a code here, then type the same code on your other devices.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={create} disabled={busy} className={`${btn} bg-amber-400 text-black`}>
-            {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : 'Create sync code'}
+          <button onClick={() => setOpen(open === 'create' ? '' : 'create')} className={`${btn} bg-amber-400 text-black`}>
+            Create sync
           </button>
-          <button onClick={() => setOpen(open ? '' : 'join')} className={`${btn} bg-white/10 text-white`}>
+          <button onClick={() => setOpen(open === 'join' ? '' : 'join')} className={`${btn} bg-white/10 text-white`}>
             I have a code
           </button>
         </div>
+        {open === 'create' && (
+          <div className="mt-3 rounded-xl bg-white/[0.04] p-3.5">
+            <p className="text-[12px] leading-relaxed text-zinc-300">
+              Your progress is saved in a <b>private note on your own GitHub account</b> (free, nothing else is stored anywhere).
+            </p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12px] text-zinc-400">
+              <li>
+                Tap <b>Get a GitHub key</b>, sign in, press <i>Generate token</i> (the <i>gist</i> permission is already ticked).
+              </li>
+              <li>Copy the key and paste it below.</li>
+              <li>You get a sync code — type that code on your other devices.</li>
+            </ol>
+            <button
+              onClick={() => window.open('https://github.com/settings/tokens/new?scopes=gist&description=GooWatch%20sync', '_blank')}
+              className={`${btn} mt-2.5 bg-white/10 text-white`}
+            >
+              Get a GitHub key
+            </button>
+            <div className="mt-2.5 flex gap-2">
+              <input
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                placeholder="Paste the GitHub key"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="min-w-0 flex-1 rounded-xl bg-white/[0.07] px-3.5 py-2.5 text-[13px] text-white outline-none ring-1 ring-white/[0.06] placeholder:text-zinc-500 focus:ring-amber-400/50"
+              />
+              <button onClick={create} disabled={busy || !token.trim()} className={`${btn} bg-amber-400 text-black`}>
+                {busy ? <Loader2 className="inline h-4 w-4 animate-spin" /> : 'Start'}
+              </button>
+            </div>
+          </div>
+        )}
         {open === 'join' && (
           <div className="mt-3 flex gap-2">
             <input
@@ -101,7 +138,7 @@ export const SyncPanel: React.FC = () => {
 
       <p className="mt-3 text-[11.5px] text-zinc-500">Your sync code — type it on your other devices:</p>
       <div className="mt-1 flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/30 px-3 py-2 text-[12px] text-zinc-300">{show ? cfg.id : cfg.id.slice(0, 8) + '••••••••••••••••••••••••'}</code>
+        <code className="min-w-0 flex-1 truncate rounded-lg bg-black/30 px-3 py-2 text-[12px] text-zinc-300">{show ? syncCode(cfg) : cfg.id.slice(0, 6) + '~••••••••••••••••••••'}</code>
         <button onClick={() => setShow((v) => !v)} className="rounded-lg bg-white/10 px-2.5 py-2 text-[11.5px] font-bold text-zinc-200 active:scale-95">
           {show ? 'Hide' : 'Show'}
         </button>
@@ -109,7 +146,7 @@ export const SyncPanel: React.FC = () => {
           {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <p className="mt-1.5 text-[11px] leading-snug text-zinc-600">Keep the code private: anyone who has it can see what you watched.</p>
+      <p className="mt-1.5 text-[11px] leading-snug text-zinc-600">Keep the code private: it contains your GitHub key. If it leaks, delete the key in GitHub → Settings → Developer settings.</p>
 
       {status.devices.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-1.5">

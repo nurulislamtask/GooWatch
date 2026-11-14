@@ -7,6 +7,8 @@ import { ShellApi } from './types';
 import { PickerButton, PickerSheet } from './Pickers';
 import { allowLibraryItem, useContentMode } from '../safety';
 import { peekRating, ensureRating, ratingNumber } from '../../services/ratings';
+import { CATEGORIES } from '../categories';
+import { FilterSheet, NO_FILTER, FilterState, filterActive, filterLabel, passFilter } from './Filters';
 
 type Sort = 'latest' | 'oldest' | 'az' | 'za' | 'rating';
 const SORTS: { key: Sort; label: string; hint?: string }[] = [
@@ -19,11 +21,18 @@ const SORTS: { key: Sort; label: string; hint?: string }[] = [
 const target = (i: ParsedFtpItem) => ({ kind: (i.mediaKind === 'series' ? 'series' : 'movie') as 'movie' | 'series', title: displayTitle(i.cleanTitle || i.rawName), year: i.year, imdbId: i.imdbId });
 
 /** Movies / Series: filter by source (language / category), sort, and an endless grid. */
-export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = ({ api, kind }) => {
+export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genre?: string; onGenre?: (g: string) => void }> = ({ api, kind, genre = '', onGenre }) => {
   const [source, setSource] = useState('all');
+  const [filter, setFilter] = useState<FilterState>(NO_FILTER);
+  const [genreLocal, setGenreLocal] = useState(genre);
+  useEffect(() => setGenreLocal(genre), [genre]);
+  const setGenre = (g: string) => {
+    setGenreLocal(g);
+    onGenre?.(g);
+  };
   const [sort, setSort] = useState<Sort>('latest');
   const [shown, setShown] = useState(60);
-  const [sheet, setSheet] = useState<'' | 'cat' | 'sort'>('');
+  const [sheet, setSheet] = useState<'' | 'cat' | 'sort' | 'genre' | 'filter'>('');
   const [ratingTick, setRatingTick] = useState(0);
   const mode = useContentMode();
   const sentinel = useRef<HTMLDivElement>(null);
@@ -35,8 +44,36 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
     return [...m.entries()].filter(([n]) => n).sort((a, b) => b[1] - a[1]);
   }, [all]);
 
+  const needLookup = !!genreLocal || filter.minRating > 0;
+  const [lookTick, setLookTick] = useState(0);
+  // genre / rating filters need the score + genres of each title: look them up in the background
+  useEffect(() => {
+    if (!needLookup) return;
+    let alive = true;
+    let n = 0;
+    const base = (source === 'all' ? all : all.filter((i) => i.sourceServerName === source)).slice(0, 400);
+    base.forEach((i) =>
+      ensureRating(target(i)).then(() => {
+        if (alive && ++n % 10 === 0) setLookTick((x) => x + 1);
+      })
+    );
+    const t = window.setTimeout(() => alive && setLookTick((x) => x + 1), 3000);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [needLookup, source, all]);
+
   const list = useMemo(() => {
     let l = source === 'all' ? all : all.filter((i) => i.sourceServerName === source);
+    if (genreLocal) {
+      const g = genreLocal.toLowerCase();
+      l = l.filter((i) => {
+        const gs = peekRating(target(i))?.genres;
+        return (gs && gs.some((x) => x.toLowerCase() === g)) || (i.sourceServerName || '').toLowerCase().includes(g);
+      });
+    }
+    if (filterActive(filter)) l = l.filter((i) => passFilter(filter, ratingNumber(peekRating(target(i))?.imdb), Number(i.year) || 0));
     l = [...l];
     const t = (i: ParsedFtpItem) => displayTitle(i.cleanTitle);
     if (sort === 'az') l.sort((a, b) => t(a).localeCompare(t(b)));
@@ -45,7 +82,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
     else if (sort === 'rating') l.sort((a, b) => ratingNumber(peekRating(target(b))?.imdb) - ratingNumber(peekRating(target(a))?.imdb));
     else l.sort((a, b) => (b.year || 0) - (a.year || 0));
     return l;
-  }, [all, source, sort, ratingTick]);
+  }, [all, source, sort, ratingTick, genreLocal, filter, lookTick]);
 
   // "Top rated": fetch the scores of the first titles in the background and re-sort as they arrive
   useEffect(() => {
@@ -94,6 +131,8 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto px-4 md:px-6" style={{ scrollbarWidth: 'none' }}>
           <PickerButton label="Categories" value={source === 'all' ? undefined : source} active={source !== 'all'} onClick={() => setSheet('cat')} />
+          <PickerButton label="Genre" value={genreLocal || undefined} active={!!genreLocal} onClick={() => setSheet('genre')} />
+          <PickerButton label="Filter" value={filterActive(filter) ? filterLabel(filter) : undefined} active={filterActive(filter)} onClick={() => setSheet('filter')} />
           <PickerButton label="Sort" value={SORTS.find((x) => x.key === sort)!.label} onClick={() => setSheet('sort')} />
           {source !== 'all' && (
             <button className={chip(false)} onClick={() => setSource('all')}>
@@ -115,7 +154,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
         ))}
       </div>
       {shown < list.length && <div ref={sentinel} className="h-16" />}
-      {list.length === 0 && <p className="px-6 pt-16 text-center text-sm text-zinc-500">Nothing here yet.</p>}
+      {list.length === 0 && <p className="px-6 pt-16 text-center text-sm text-zinc-500">{needLookup ? 'Nothing matches yet — titles are still being checked, or try another filter.' : 'Nothing here yet.'}</p>}
       {sheet === 'cat' && (
         <PickerSheet
           title="Categories"
@@ -125,6 +164,16 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
           onClose={() => setSheet('')}
         />
       )}
+      {sheet === 'genre' && (
+        <PickerSheet
+          title="Genre"
+          value={genreLocal}
+          options={[{ key: '', label: 'All' }, ...CATEGORIES.filter((c) => !c.type && (mode === 'all' || !['Horror', 'Crime', 'War'].includes(c.id))).map((c) => ({ key: c.id, label: c.label }))]}
+          onPick={setGenre}
+          onClose={() => setSheet('')}
+        />
+      )}
+      {sheet === 'filter' && <FilterSheet value={filter} onChange={setFilter} onClose={() => setSheet('')} />}
       {sheet === 'sort' && <PickerSheet title="Sort by" value={sort} options={SORTS} onPick={(k) => setSort(k as Sort)} onClose={() => setSheet('')} />}
     </div>
   );

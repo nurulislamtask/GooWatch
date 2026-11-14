@@ -11,6 +11,7 @@ import { deviceLabel } from '../resume';
 import { openAddonStore } from '../../extensions/catalog';
 import { useExtensions } from '../../extensions/store';
 import { Puzzle } from 'lucide-react';
+import { titleKey } from '../../utils/dedupe';
 
 const AddonBanner: React.FC = () => {
   const exts = useExtensions();
@@ -128,24 +129,38 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
 
   const homeItems = useMemo(() => library.filter((i) => !hidden.has(i.sourceServerName || '')), [library, hidden]);
   const hero = useMemo(() => pickTrending(homeItems, 6), [homeItems.length > 0 ? homeItems[0].id : '', homeItems.length > 20]);
-  const trending = useMemo(() => pickTrending(homeItems, 24).slice(0, 20), [homeItems.length > 0 ? homeItems[0].id : '', homeItems.length > 20]);
-  const movies = useMemo(() => homeItems.filter((i) => i.mediaKind === 'movie').sort(newest).slice(0, 24), [homeItems]);
-  const series = useMemo(() => homeItems.filter((i) => i.mediaKind === 'series').sort(newest).slice(0, 24), [homeItems]);
-  const dual = useMemo(() => homeItems.filter((i) => /dual|multi/i.test(`${i.audioTag || ''} ${i.rawName}`)).sort(newest).slice(0, 20), [homeItems]);
-
-  const sourceRows = useMemo(() => {
+  // a title shows up on ONE shelf only: hero, then Trending, New Movies, New Series, Dual Audio, then the per-server shelves
+  const { trending, movies, series, dual, sourceRows } = useMemo(() => {
+    const used = new Set(hero.map(titleKey));
+    const take = (list: ParsedFtpItem[], n: number) => {
+      const out: ParsedFtpItem[] = [];
+      for (const i of list) {
+        const k = titleKey(i);
+        if (!k || used.has(k)) continue;
+        used.add(k);
+        out.push(i);
+        if (out.length >= n) break;
+      }
+      return out;
+    };
+    const trending = take(pickTrending(homeItems, 40), 20);
+    const movies = take(homeItems.filter((i) => i.mediaKind === 'movie').sort(newest), 24);
+    const series = take(homeItems.filter((i) => i.mediaKind === 'series').sort(newest), 24);
+    const dual = take(homeItems.filter((i) => /dual|multi/i.test(`${i.audioTag || ''} ${i.rawName}`)).sort(newest), 20);
     const groups = new Map<string, ParsedFtpItem[]>();
     for (const it of homeItems) {
       const k = it.sourceServerName || '';
       if (!k) continue;
       (groups.get(k) || groups.set(k, []).get(k)!).push(it);
     }
-    return [...groups.entries()]
-      .filter(([, v]) => v.length >= 6)
+    const sourceRows = [...groups.entries()]
       .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, 6)
-      .map(([name, v]) => ({ name, items: [...v].sort(newest).slice(0, 20) }));
-  }, [homeItems]);
+      .slice(0, 8)
+      .map(([name, v]) => ({ name, items: take([...v].sort(newest), 20) }))
+      .filter((r) => r.items.length >= 6)
+      .slice(0, 6);
+    return { trending, movies, series, dual, sourceRows };
+  }, [homeItems, hero]);
 
   const [removedTick, bump] = React.useReducer((x: number) => x + 1, 0);
   const continueList = useMemo(() => {

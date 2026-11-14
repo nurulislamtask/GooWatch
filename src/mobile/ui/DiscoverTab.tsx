@@ -9,6 +9,7 @@ import { useExtensions } from '../../extensions/store';
 import { ExtCatalog, ExtPreview } from '../../extensions/types';
 import { usePrefs } from '../prefs';
 import { allowExt, allowExtItem, genresFor } from '../safety';
+import { FilterSheet, NO_FILTER, FilterState, filterActive, filterLabel, passFilter } from './Filters';
 import { CATEGORY_EVENT, Category, takePendingCategory } from '../categories';
 import { ratingNumber } from '../../services/ratings';
 
@@ -54,7 +55,9 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   const [catKey, setCatKey] = useState('');
   const [genre, setGenre] = useState('');
   const [sort, setSort] = useState<Sort>('popular');
-  const [sheet, setSheet] = useState<'' | 'cat' | 'sort'>('');
+  const [sheet, setSheet] = useState<'' | 'cat' | 'sort' | 'filter'>('');
+  const [filter, setFilter] = useState<FilterState>(NO_FILTER);
+  const [serverGenre, setServerGenre] = useState('');
 
   // ---- which catalog + genre is really loaded ----
   const kidsWanted = mode === 'kids' ? ['Family', 'Animation'] : [];
@@ -122,14 +125,20 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
 
   const shown = useMemo(() => {
     let l = items.filter((it) => allowExtItem(it, mode, mode === 'kids' && !!effGenre));
+    if (filterActive(filter)) l = l.filter((it) => passFilter(filter, ratingNumber(it.rating), yearNum(it.year)));
     if (sort === 'rating') l = [...l].sort((a, b) => ratingNumber(b.rating) - ratingNumber(a.rating));
     else if (sort === 'newest') l = [...l].sort((a, b) => yearNum(b.year) - yearNum(a.year));
     else if (sort === 'az') l = [...l].sort((a, b) => a.name.localeCompare(b.name));
     return l;
-  }, [items, sort, mode, effGenre]);
+  }, [items, sort, mode, effGenre, filter]);
 
   // ---- a category picked in the PC sidebar / category list ----
   const applyCategory = (c: Category) => {
+    if (!extOn || (types.length === 0 && hasServers)) {
+      setView('servers');
+      setServerGenre(c.type ? '' : c.id);
+      return;
+    }
     setView('ext');
     setCatKey('');
     if (c.type && types.includes(c.type)) {
@@ -187,7 +196,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
               <button className={chip(serverKind === 'movie')} onClick={() => setServerKind('movie')}>Movies</button>
               <button className={chip(serverKind === 'series')} onClick={() => setServerKind('series')}>Series</button>
             </div>
-            <BrowseTab api={api} kind={serverKind} />
+            <BrowseTab api={api} kind={serverKind} genre={serverGenre} onGenre={setServerGenre} />
           </>
         ) : (
           <p className="px-8 pt-16 text-center text-sm text-zinc-500">No server added yet. Open Settings → My servers, or turn on Extensions.</p>
@@ -217,6 +226,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
           {types.length > 0 && (
             <div className="flex gap-2 overflow-x-auto px-4 pt-2 md:px-6" style={{ scrollbarWidth: 'none' }}>
               <PickerButton label="Categories" value={effGenre || undefined} active={!!genre} onClick={() => setSheet('cat')} />
+              <PickerButton label="Filter" value={filterActive(filter) ? filterLabel(filter) : undefined} active={filterActive(filter)} onClick={() => setSheet('filter')} />
               <PickerButton label="Sort" value={sortLabel} onClick={() => setSheet('sort')} />
               {chips.length > 1 &&
                 chips.map((c) => {
@@ -265,6 +275,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
           onClose={() => setSheet('')}
         />
       )}
+      {sheet === 'filter' && <FilterSheet value={filter} onChange={setFilter} onClose={() => setSheet('')} />}
       {sheet === 'sort' && (
         <PickerSheet
           title="Sort by"

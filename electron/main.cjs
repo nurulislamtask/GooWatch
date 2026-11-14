@@ -76,12 +76,18 @@ async function boot() {
   const distPath = path.join(__dirname, '..', 'dist');
   const { startServer } = require('./server.cjs');
 
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  // The same port every time keeps the saved data (localStorage belongs to the address). After an update the old
+  // process can still hold the port for a moment, so try a few times before using a random one.
   let port;
-  try {
-    port = await startServer(distPath, PREFERRED_PORT);
-  } catch {
-    port = await startServer(distPath, 0);
+  for (let i = 0; i < 6 && !port; i++) {
+    try {
+      port = await startServer(distPath, PREFERRED_PORT);
+    } catch {
+      await wait(700);
+    }
   }
+  if (!port) port = await startServer(distPath, 0);
 
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -125,7 +131,19 @@ async function boot() {
     }
   });
 
-  await mainWindow.loadURL(appOrigin);
+  // ERR_FAILED (-2) can happen once while the local server is still waking up: try again a few times
+  let loadErr;
+  for (let i = 0; i < 5; i++) {
+    try {
+      await mainWindow.loadURL(appOrigin);
+      loadErr = null;
+      break;
+    } catch (e) {
+      loadErr = e;
+      await wait(600 * (i + 1));
+    }
+  }
+  if (loadErr) throw loadErr;
   mainWindow.on('closed', () => (mainWindow = null));
   if (pendingLink) {
     const l = pendingLink;

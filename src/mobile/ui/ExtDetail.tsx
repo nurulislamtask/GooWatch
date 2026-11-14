@@ -121,12 +121,12 @@ export const ExtDetail: React.FC<{
       <div className="relative h-[42vh] min-h-[260px] md:h-[46vh]">
         {bg && <img src={bg} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />}
         <div className="absolute inset-0 bg-gradient-to-t from-[#07080C] via-[#07080C]/50 to-black/30" />
-        <button onClick={onClose} aria-label="Back" className="absolute left-3 top-3 rounded-full bg-black/50 p-2.5 backdrop-blur active:scale-90">
+        <button onClick={onClose} aria-label="Back" className="absolute left-3 rounded-full bg-black/50 p-2.5 backdrop-blur active:scale-90" style={{ top: 'max(12px, env(safe-area-inset-top))' }}>
           <ArrowLeft className="h-5 w-5 text-white" />
         </button>
       </div>
 
-      <div className="-mt-24 px-4 pb-10 md:px-10">
+      <div className="relative z-10 -mt-20 px-4 pb-10 md:px-10">
         <div className="flex gap-4">
           {(meta?.poster || preview.poster) && (
             <img src={meta?.poster || preview.poster} alt="" className="h-40 w-[107px] shrink-0 rounded-xl object-cover ring-1 ring-white/10 md:h-56 md:w-[150px]" />

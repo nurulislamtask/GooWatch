@@ -58,18 +58,18 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
 
   return (
     <div className="fixed inset-0 z-[220] overflow-y-auto bg-[#07080C]">
-      <div className="sticky top-0 z-10 flex items-center gap-2 bg-[#07080C]/95 px-3 py-3 backdrop-blur">
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-[#07080C]/95 px-3 pb-3 backdrop-blur" style={{ paddingTop: 'max(40px, calc(env(safe-area-inset-top) + 20px))' }}>
         <button onClick={onClose} aria-label="Back" className="rounded-full p-2 active:bg-white/10">
           <ArrowLeft className="h-5 w-5 text-white" />
         </button>
-        <div className="flex flex-1 items-center gap-2 rounded-xl bg-white/[0.08] px-3">
-          <Search className="h-4 w-4 text-zinc-400" />
+        <div className="flex flex-1 items-center gap-2.5 rounded-2xl bg-white/[0.1] px-4 ring-1 ring-white/10 focus-within:ring-amber-400/60">
+          <Search className="h-5 w-5 text-zinc-400" />
           <input
             ref={input}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search movies & series"
-            className="w-full bg-transparent py-2.5 text-[15px] text-white outline-none placeholder:text-zinc-500"
+            className="w-full bg-transparent py-4 text-[17px] text-white outline-none placeholder:text-zinc-500"
           />
           {q && (
             <button onClick={() => setQ('')} aria-label="Clear">

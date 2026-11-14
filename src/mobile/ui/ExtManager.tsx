@@ -1,3 +1,4 @@
+import { hasConfig } from '../../extensions/store';
 import React, { useState } from 'react';
 import { ArrowLeft, Loader2, Plus, Puzzle, Trash2 } from 'lucide-react';
 import { installExtension, removeExtension, setExtensionEnabled, setScraperEnabled, SUGGESTED, useExtensions } from '../../extensions/store';
@@ -95,7 +96,7 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                     onClick={() => window.open(`${e.base}/configure`, '_blank')}
                     className="mb-0.5 mt-0.5 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-200 active:scale-95"
                   >
-                    {e.manifest.behaviorHints?.configurationRequired && !e.query && !/^[^/]+\/.+/.test(e.base.replace(/^https?:\/\//, '')) ? '⚠ Set up (needed)' : 'Configure'}
+                    {hasConfig(e) ? '✓ Set up · change' : e.manifest.behaviorHints?.configurationRequired ? '⚠ Set up (needed)' : 'Configure'}
                   </button>
                 )}
                 <p className="line-clamp-2 text-[11.5px] text-zinc-500">

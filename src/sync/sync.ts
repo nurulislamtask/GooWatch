@@ -11,7 +11,6 @@ const RECENT_KEY = 'cineftp_recent_v6';
 const WATCH_KEY = 'cineftp_watchlist_v6';
 const EXT_KEY = 'goowatch_ext_list_v1';
 const STAMPS: Record<StoreName, string> = { watch: 'gw_watch_stamps_v1', ext: 'gw_ext_stamps_v1' };
-const BASE = 'https://jsonblob.com/api/jsonBlob';
 const POLL_MS = 30_000;
 const SOON_MS = 12_000;
 
@@ -34,7 +33,8 @@ interface Doc {
   dev: Record<string, { n: string; u: number }>;
 }
 export interface SyncCfg {
-  id: string; // the sync code
+  id: string; // gist id
+  token: string; // the user's GitHub key (permission: gist only)
   last?: number;
 }
 export interface SyncStatus {
@@ -202,49 +202,74 @@ function applyLocal(m: Doc) {
   window.dispatchEvent(new CustomEvent('gw:sync-applied', { detail: { recent, watch: readJson<any[]>(WATCH_KEY, []) } }));
 }
 
-// ---------- transport ----------
-async function httpGet(id: string): Promise<Doc> {
-  const r = await request(`${BASE}/${id}`, { headers: { Accept: 'application/json' }, timeoutMs: 15000 });
-  if (r.status === 404) throw new Error('Sync code not found. Check that you typed it exactly.');
-  if (r.status >= 400 || r.status === 0) throw new Error(`Sync server error (${r.status})`);
+// ---------- transport: one private GitHub Gist per user (free, reliable, owned by the user) ----------
+const GH = 'https://api.github.com';
+const FILE = 'goowatch-sync.json';
+const ghHeaders = (token: string): Record<string, string> => ({
+  Authorization: `Bearer ${token}`,
+  Accept: 'application/vnd.github+json',
+  'X-GitHub-Api-Version': '2022-11-28',
+  'Content-Type': 'application/json',
+});
+const ghFail = (status: number): Error =>
+  status === 401 || status === 403
+    ? new Error('GitHub did not accept this key. Create a new one with the "gist" permission and try again.')
+    : status === 404
+    ? new Error('Sync not found. Check the sync code (copy it completely).')
+    : new Error(`Sync server error (${status})`);
+
+async function httpGet(cfg: SyncCfg): Promise<Doc> {
+  const r = await request(`${GH}/gists/${cfg.id}`, { headers: ghHeaders(cfg.token), timeoutMs: 20000 });
+  if (r.status >= 400 || r.status === 0) throw ghFail(r.status);
+  let f: any;
+  try {
+    f = JSON.parse(r.text)?.files?.[FILE];
+  } catch {
+    f = null;
+  }
+  if (!f) throw new Error('This code does not belong to a GooWatch sync');
+  let text: string = f.content || '';
+  if (f.truncated && f.raw_url) text = (await request(f.raw_url, { timeoutMs: 20000 })).text;
   let d: any;
   try {
-    d = JSON.parse(r.text);
+    d = JSON.parse(text);
   } catch {
     throw new Error('This code does not belong to a GooWatch sync');
   }
   if (!d || d.v !== 1) throw new Error('This code does not belong to a GooWatch sync');
   return d as Doc;
 }
-async function httpPut(id: string, d: Doc): Promise<void> {
-  const r = await request(`${BASE}/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(d),
-    timeoutMs: 20000,
+async function httpPut(cfg: SyncCfg, d: Doc): Promise<void> {
+  const r = await request(`${GH}/gists/${cfg.id}`, {
+    method: 'PATCH',
+    headers: ghHeaders(cfg.token),
+    body: JSON.stringify({ files: { [FILE]: { content: JSON.stringify(d) } } }),
+    timeoutMs: 25000,
   });
-  if (r.status >= 400 || r.status === 0) throw new Error(`Could not save to the sync server (${r.status})`);
+  if (r.status >= 400 || r.status === 0) throw ghFail(r.status);
 }
-async function httpCreate(d: Doc): Promise<string> {
-  const r = await request(BASE, {
+async function httpCreate(token: string, d: Doc): Promise<string> {
+  const r = await request(`${GH}/gists`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(d),
-    timeoutMs: 20000,
+    headers: ghHeaders(token),
+    body: JSON.stringify({ description: 'GooWatch sync (do not edit)', public: false, files: { [FILE]: { content: JSON.stringify(d) } } }),
+    timeoutMs: 25000,
   });
-  if (r.status >= 400 || r.status === 0) throw new Error(`Could not create a sync code (${r.status})`);
-  const h: Record<string, string> = {};
-  Object.entries(r.headers || {}).forEach(([k, v]) => (h[k.toLowerCase()] = String(v)));
-  const loc = h['location'] || h['x-jsonblob'] || h['x-jsonblob-id'] || '';
-  const id = loc.split('/').filter(Boolean).pop() || '';
-  if (!/^[0-9a-zA-Z-]{8,64}$/.test(id)) throw new Error('The sync server did not return a code. Try again.');
+  if (r.status >= 400 || r.status === 0) throw ghFail(r.status);
+  let id = '';
+  try {
+    id = String(JSON.parse(r.text).id || '');
+  } catch {
+    /* handled below */
+  }
+  if (!/^[0-9a-f]{6,64}$/i.test(id)) throw new Error('GitHub did not return a sync id. Try again.');
   return id;
 }
 
 // ---------- state ----------
 export function getSyncCfg(): SyncCfg | null {
   const c = readJson<SyncCfg | null>(CFG_KEY, null);
-  return c && c.id ? c : null;
+  return c && c.id && c.token ? c : null;
 }
 let status: SyncStatus = { state: 'idle', devices: [] };
 const subs = new Set<() => void>();
@@ -278,7 +303,7 @@ export async function syncNow(): Promise<void> {
   running = true;
   setStatus({ state: 'syncing', error: undefined });
   try {
-    const remote = await httpGet(cfg.id);
+    const remote = await httpGet(cfg);
     const me = deviceId();
     const l = localDoc();
     const m = merge(l, remote);
@@ -293,7 +318,7 @@ export async function syncNow(): Promise<void> {
     if (core(m) !== core(remote) || heartbeat) {
       let out = m;
       if (JSON.stringify(out).length > 800_000) out = { ...m, recent: m.recent.map((x) => ({ ...x, video: slim({ ...x.video, episodeGuide: undefined }, false) })) };
-      await httpPut(cfg.id, out);
+      await httpPut(cfg, out);
     }
     writeJson(CFG_KEY, { ...cfg, last: now });
     setStatus({
@@ -312,43 +337,52 @@ export async function syncNow(): Promise<void> {
   }
 }
 
-/** Turns sync on for this device and returns the code to type on the other devices. */
-export async function createSync(): Promise<string> {
+/** The text to type on the other devices (gist id + key). */
+export const syncCode = (c: SyncCfg) => `${c.id}~${c.token}`;
+
+/** Turns sync on for this device with a GitHub key and returns the code to type on the other devices. */
+export async function createSync(token: string): Promise<string> {
+  const tk = token.trim();
+  if (!tk) throw new Error('Paste your GitHub key first');
   setStatus({ state: 'syncing', error: undefined });
   try {
     const d = localDoc();
     d.dev = { [deviceId()]: { n: deviceLabel(), u: Date.now() } };
-    const id = await httpCreate(d);
-    writeJson(CFG_KEY, { id });
+    const id = await httpCreate(tk, d);
+    const cfg: SyncCfg = { id, token: tk };
+    writeJson(CFG_KEY, cfg);
     setStatus({ state: 'ok', last: Date.now() });
     syncNow();
-    return id;
+    return syncCode(cfg);
   } catch (e: any) {
     setStatus({ state: 'error', error: String(e?.message || e) });
     throw e;
   }
 }
 
-export function parseCode(input: string): string {
-  const t = input.trim().split(/[?#]/)[0].replace(/\/+$/, '');
-  const last = t.split('/').pop() || '';
-  return /^[0-9a-zA-Z-]{8,64}$/.test(last) ? last : '';
+export function parseCode(input: string): SyncCfg | null {
+  const t = input.trim();
+  const i = t.indexOf('~');
+  if (i < 6) return null;
+  const id = t.slice(0, i).trim();
+  const token = t.slice(i + 1).trim();
+  return /^[0-9a-f]{6,64}$/i.test(id) && token.length > 10 ? { id, token } : null;
 }
 
 /** Joins the sync of another device with its code; everything on this device is kept and merged. */
 export async function joinSync(input: string): Promise<void> {
-  const id = parseCode(input);
-  if (!id) throw new Error('That does not look like a sync code');
+  const cfg = parseCode(input);
+  if (!cfg) throw new Error('That does not look like a sync code. Copy the whole code from your other device.');
   setStatus({ state: 'syncing', error: undefined });
   try {
-    await httpGet(id); // proves the code exists
-    writeJson(CFG_KEY, { id });
+    await httpGet(cfg); // proves the code works
+    writeJson(CFG_KEY, cfg);
     running = false;
     await syncNow();
     if (status.state === 'error') throw new Error(status.error || 'Sync failed');
   } catch (e: any) {
     try {
-      if (getSyncCfg()?.id === id && status.state === 'error') localStorage.removeItem(CFG_KEY);
+      if (status.state === 'error') localStorage.removeItem(CFG_KEY);
     } catch {
       /* ignore */
     }

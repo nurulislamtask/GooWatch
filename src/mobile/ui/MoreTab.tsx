@@ -24,7 +24,7 @@ import { fetchLatestRelease, isNewer } from '../../components/AppUpdatePrompt';
 import { NativePlayer } from '../nativePlayer';
 import { AboutPanel } from '../../components/AboutPanel';
 import { SyncPanel } from './SyncPanel';
-import { changeMode } from '../safety';
+import { changeMode, checkPin } from '../safety';
 import { openAddonStore } from '../../extensions/catalog';
 import { IS_CAPACITOR } from '../../utils/platform';
 
@@ -150,7 +150,7 @@ export const MoreTab: React.FC<Props> = (p) => {
             {([['all', 'Normal'], ['family', 'Family'], ['kids', 'Kids']] as const).map(([m, label]) => (
               <button
                 key={m}
-                onClick={() => changeMode(m)}
+                onClick={() => void changeMode(m)}
                 className={`flex-1 rounded-lg py-2 text-[13px] font-bold ${p.prefs.contentMode === m ? (m === 'all' ? 'bg-amber-400 text-black' : 'bg-emerald-400 text-black') : 'text-zinc-300'}`}
               >
                 {label}
@@ -163,10 +163,8 @@ export const MoreTab: React.FC<Props> = (p) => {
           </p>
           {p.prefs.contentMode !== 'all' && p.prefs.kidsPin && (
             <button
-              onClick={() => {
-                const v = window.prompt('Enter the current PIN to remove it');
-                if (v !== null && v.trim() === p.prefs.kidsPin) p.setPrefs({ kidsPin: '' });
-                else if (v !== null) window.alert('Wrong PIN');
+              onClick={async () => {
+                if (await checkPin('Enter the current PIN to remove it')) p.setPrefs({ kidsPin: '' });
               }}
               className="mt-2 text-[12px] font-semibold text-zinc-400 underline"
             >
@@ -233,46 +231,7 @@ export const MoreTab: React.FC<Props> = (p) => {
         />
         {showSources && (
           <div className="bg-black/20">
-            {p.sources.map((s) => (
-              <div key={s.id} className="flex items-center gap-2 border-t border-white/[0.04] px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13.5px] font-medium text-zinc-100">{s.name}</p>
-                  <p className="truncate text-[11px] text-zinc-500">
-                    {s.type === 'movies' ? 'Movies' : 'Series'}
-                    {s.count ? ` · ${s.count.toLocaleString()}` : ''}
-                  </p>
-                </div>
-                <button
-                  aria-label="Show on Home"
-                  onClick={() => toggleHome(s.id)}
-                  className="rounded-lg p-2 active:bg-white/10"
-                >
-                  {hiddenSet.has(s.id) ? <EyeOff className="h-4.5 w-4.5 text-zinc-500" /> : <Eye className="h-4.5 w-4.5 text-amber-400" />}
-                </button>
-                <button
-                  aria-label="Re-scan"
-                  disabled={busyId === s.id}
-                  onClick={async () => {
-                    setBusyId(s.id);
-                    await p.onSyncSource(s.id);
-                    setBusyId(null);
-                    p.onRefresh();
-                  }}
-                  className="rounded-lg p-2 active:bg-white/10"
-                >
-                  {busyId === s.id ? <Loader2 className="h-4 w-4 animate-spin text-zinc-400" /> : <RefreshCw className="h-4 w-4 text-zinc-400" />}
-                </button>
-                <button
-                  aria-label="Remove"
-                  onClick={() => window.confirm(`Remove "${s.name}"?`) && p.onRemoveSource(s.id)}
-                  className="rounded-lg p-2 active:bg-white/10"
-                >
-                  <Trash2 className="h-4 w-4 text-rose-400" />
-                </button>
-              </div>
-            ))}
             <SourceCatalog sources={p.sources} onActivate={p.onActivateSource} onDeactivate={p.onRemoveSource} />
-            <p className="px-4 pb-1 pt-2 text-[11px] text-zinc-500">The eye decides if a source is shown on the Home page.</p>
             <button onClick={() => setShowAdd((v) => !v)} className="flex w-full items-center gap-2 px-4 py-3 text-[13.5px] font-semibold text-amber-400 active:bg-white/[0.04]">
               <Plus className="h-4 w-4" /> Add a source
             </button>

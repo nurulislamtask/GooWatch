@@ -6,6 +6,7 @@ import { useExtensions } from '../../extensions/store';
 import { ExtPreview } from '../../extensions/types';
 import { allowExt, allowExtItem, useContentMode } from '../safety';
 import { ratingNumber } from '../../services/ratings';
+import { publishTop } from '../homeSeen';
 
 interface Job {
   key: string;
@@ -71,28 +72,31 @@ export const TopRows: React.FC<{ onOpen: (p: ExtPreview) => void }> = ({ onOpen 
     };
   }, [plan, mode]);
 
+  // each title appears on one shelf only (the Top 10 shelves come first)
+  const used = new Set<string>();
+  const shelves = plan
+    .map((p) => {
+      const k = `${mode}|${p.job.key}|${p.ext.base}|${p.cat.id}`;
+      let list = (data[k] || []).filter((it) => allowExtItem(it, mode, mode === 'kids'));
+      if (p.job.byRating && list.some((it) => it.rating)) list = [...list].sort((a, b) => ratingNumber(b.rating) - ratingNumber(a.rating));
+      if (!p.job.ranked) list = list.filter((it) => !used.has(it.id));
+      list = list.slice(0, p.job.count);
+      list.forEach((it) => used.add(it.id));
+      return { p, k, list };
+    })
+    .filter((x) => x.list.length);
+  const usedKey = [...used].join(',');
+  useEffect(() => publishTop(new Set(usedKey ? usedKey.split(',') : [])), [usedKey]);
+
   return (
     <>
-      {plan.map((p) => {
-        const k = `${mode}|${p.job.key}|${p.ext.base}|${p.cat.id}`;
-        let list = (data[k] || []).filter((it) => allowExtItem(it, mode, mode === 'kids'));
-        if (p.job.byRating && list.some((it) => it.rating)) list = [...list].sort((a, b) => ratingNumber(b.rating) - ratingNumber(a.rating));
-        list = list.slice(0, p.job.count);
-        if (!list.length) return null;
-        return (
-          <Row key={k} title={p.job.title} subtitle={p.job.subtitle}>
-            {list.map((it, i) => (
-              <ExtCard
-                key={it.id}
-                item={it}
-                onOpen={onOpen}
-                rank={p.job.ranked ? i + 1 : undefined}
-                className="w-[31vw] max-w-[150px] shrink-0 snap-start"
-              />
-            ))}
-          </Row>
-        );
-      })}
+      {shelves.map(({ p, k, list }) => (
+        <Row key={k} title={p.job.title} subtitle={p.job.subtitle}>
+          {list.map((it, i) => (
+            <ExtCard key={it.id} item={it} onOpen={onOpen} rank={p.job.ranked ? i + 1 : undefined} className="w-[31vw] max-w-[150px] shrink-0 snap-start" />
+          ))}
+        </Row>
+      ))}
     </>
   );
 };

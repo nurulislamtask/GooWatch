@@ -284,9 +284,9 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
   const sizeFormatted = effectivePlayable.sizeFormatted || item.sizeFormatted || '1.6 GB';
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#090A0F] text-zinc-100 select-none pb-24">
+    <div className="min-h-full flex-1 bg-[#090A0F] text-zinc-100 select-none pb-24">
       {/* Top Back Navigation Breadcrumb */}
-      <div className="px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-[#161B24] text-xs font-medium text-zinc-400">
+      <div className="px-4 sm:px-8 py-3.5 flex items-center justify-between border-b border-[#161B24] text-xs font-medium text-zinc-400" style={{ paddingTop: 'max(14px, env(safe-area-inset-top))' }}>
         <button
           onClick={onBack}
           className="flex items-center gap-2 hover:text-white transition-colors cursor-pointer group"

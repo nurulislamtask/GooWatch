@@ -4,6 +4,7 @@ import { peekItemMetadata } from '../services/ftpClient';
 import { ExtPreview, InstalledExt } from '../extensions/types';
 import { readPrefs, usePrefs, writePrefs } from './prefs';
 
+import { askText, tellText } from './ui/AskDialog';
 export type ContentMode = 'all' | 'family' | 'kids';
 
 const ADULT = /\b(18\s?\+|xxx|erotic|erotica|adult|uncensored|nude|porn|hentai|ullu|kamasutra|sexy|sex (tape|scene|education)|escort|stripper|bdsm)\b/i;
@@ -51,31 +52,34 @@ export function allowExtItem(p: ExtPreview, mode: ContentMode = currentMode(), t
 
 export const allowExt = (e: InstalledExt, mode: ContentMode = currentMode()) => mode === 'all' || !e.manifest.behaviorHints?.adult;
 
-/** Switching away from Kids / Family asks for the PIN when one is set. Returns false when the change is refused. */
-export function changeMode(next: ContentMode): boolean {
+/** Asks for the 4-digit PIN (in-app dialog). Returns true when it matched. */
+export async function checkPin(message: string): Promise<boolean> {
+  const pin = readPrefs().kidsPin;
+  if (!pin) return true;
+  const v = await askText(message, { secret: true, ok: 'Unlock' });
+  if (v === null) return false;
+  if (v.trim() === pin) return true;
+  await tellText('Wrong PIN');
+  return false;
+}
+
+/** Switching away from Kids / Family asks for the PIN when one is set. Resolves false when the change is refused. */
+export async function changeMode(next: ContentMode): Promise<boolean> {
   const p = readPrefs();
   if (next === p.contentMode) return true;
-  const locked = p.contentMode !== 'all' && next !== p.contentMode && (next === 'all' || (p.contentMode === 'kids' && next === 'family'));
-  if (locked && p.kidsPin) {
-    const v = window.prompt('Enter the PIN to leave this mode');
-    if (v === null) return false;
-    if (v.trim() !== p.kidsPin) {
-      window.alert('Wrong PIN');
-      return false;
-    }
-  }
-  if (next === 'kids' && !p.kidsPin && p.contentMode !== 'kids') {
-    const v = window.prompt('Kids mode: set a 4-digit PIN so only you can leave it (leave empty for no PIN)');
+  const locked = p.contentMode !== 'all' && (next === 'all' || (p.contentMode === 'kids' && next === 'family'));
+  if (locked && !(await checkPin('Enter the PIN to leave this mode'))) return false;
+  if (next === 'kids' && !p.kidsPin) {
+    const v = await askText('Kids mode', { text: 'Set a 4-digit PIN so only you can leave it. Leave empty for no PIN.', secret: true, ok: 'Start' });
     if (v === null) return false;
     const pin = v.trim();
     if (pin && !/^\d{4}$/.test(pin)) {
-      window.alert('The PIN must be 4 digits');
+      await tellText('The PIN must be 4 digits');
       return false;
     }
     writePrefs({ kidsPin: pin });
   }
-  if (next === 'all') writePrefs({ contentMode: next });
-  else writePrefs({ contentMode: next });
+  writePrefs({ contentMode: next });
   return true;
 }
 

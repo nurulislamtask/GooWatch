@@ -12,6 +12,7 @@ export interface Rating {
   imdb?: string; // "7.8"
   rt?: string; // "87%"
   id?: string; // tt1234567
+  genres?: string[];
   t: number;
   rtFor?: string; // OMDb key the Rotten Tomatoes value was looked up with
 }
@@ -95,7 +96,7 @@ function schedule<T>(fn: () => Promise<T>): Promise<T> {
   });
 }
 
-async function imdbByTitle(t: RatingTarget): Promise<{ id?: string; imdb?: string }> {
+async function imdbByTitle(t: RatingTarget): Promise<{ id?: string; imdb?: string; genres?: string[] }> {
   const q = norm(t.title);
   if (!q) return {};
   const r = await getJson<{ metas?: any[] }>(`${CINEMETA}/catalog/${t.kind}/top/search=${encodeURIComponent(t.title)}.json`, 24 * 3600 * 1000, 10000);
@@ -110,14 +111,19 @@ async function imdbByTitle(t: RatingTarget): Promise<{ id?: string; imdb?: strin
     (metas.length === 1 && norm(String(metas[0].name)).startsWith(q) ? metas[0] : undefined);
   if (!pick) return {};
   let imdb = pick.imdbRating ? String(pick.imdbRating) : undefined;
-  if (!imdb) imdb = (await imdbById(t.kind, String(pick.id))).imdb;
-  return { id: String(pick.id), imdb };
+  let genres: string[] | undefined = Array.isArray(pick.genres) ? pick.genres.map(String) : undefined;
+  if (!imdb || !genres) {
+    const m = await imdbById(t.kind, String(pick.id));
+    imdb = imdb || m.imdb;
+    genres = genres || m.genres;
+  }
+  return { id: String(pick.id), imdb, genres };
 }
 
-async function imdbById(kind: string, id: string): Promise<{ imdb?: string }> {
+async function imdbById(kind: string, id: string): Promise<{ imdb?: string; genres?: string[] }> {
   const r = await getJson<{ meta?: any }>(`${CINEMETA}/meta/${kind}/${id}.json`, 24 * 3600 * 1000, 10000);
   const v = r.meta?.imdbRating;
-  return { imdb: v ? String(v) : undefined };
+  return { imdb: v ? String(v) : undefined, genres: Array.isArray(r.meta?.genres) ? r.meta.genres.map(String) : undefined };
 }
 
 async function rottenById(id: string, key: string): Promise<string | undefined> {
@@ -148,11 +154,14 @@ export function ensureRating(t: RatingTarget): Promise<Rating | undefined> {
       if (!(Date.now() - cur.t < HIT_TTL && (cur.imdb || cur.id))) {
         if (isImdb(t.imdbId)) {
           cur.id = t.imdbId;
-          cur.imdb = t.imdb || (await imdbById(t.kind, t.imdbId!)).imdb;
+          const m = await imdbById(t.kind, t.imdbId!);
+          cur.imdb = t.imdb || m.imdb;
+          cur.genres = m.genres;
         } else {
           const f = await imdbByTitle(t);
           cur.id = f.id;
           cur.imdb = f.imdb;
+          cur.genres = f.genres;
         }
       }
       if (omdb && cur.id && cur.rtFor !== omdb) {
