@@ -124,7 +124,7 @@ android {
 
 m = open(manifest, encoding='utf8').read()
 if 'REQUEST_INSTALL_PACKAGES' not in m:
-    m = m.replace('<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
+    m = m.replace('<application', '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />\n    <application', 1)
     open(manifest, 'w', encoding='utf8').write(m)
 # 4b) install links from websites: stremio:// nuvio:// goowatch:// open GooWatch (-> "Install extension?" popup)
 m = open(manifest, encoding='utf8').read()

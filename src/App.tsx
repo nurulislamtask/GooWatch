@@ -122,6 +122,8 @@ export default function App() {
   } | null>(null);
 
   // Active Cinema Video Player
+  const [starting, setStarting] = useState(false); // a title is being opened: show a spinner, ignore extra taps
+  const startingRef = useRef(false);
   const [activePlayerState, setActivePlayerState] = useState<{
     video: ParsedFtpItem;
     playlist: ParsedFtpItem[];
@@ -429,6 +431,7 @@ export default function App() {
 
   // Handle Play Direct from Card or Detail
   const handlePlayDirect = async (item: ParsedFtpItem, _meta?: EnrichedMetadata | null) => {
+    if (startingRef.current) return;
     // 1. If it's already a direct video file (or an extension stream), launch player immediately with 0ms delay!
     const isDirectVideo = !!item.directStream || /\.(mp4|mkv|webm|avi|mov|ts|m4v)(\?.*)?$/i.test(item.url);
     if (isDirectVideo) {
@@ -463,6 +466,8 @@ export default function App() {
       !isDirectVideo;
 
     if (isFolder) {
+      startingRef.current = true;
+      setStarting(true);
       setIsLoading(true);
       try {
         const playable = await resolvePlayableFromFolder(item);
@@ -508,6 +513,8 @@ export default function App() {
         });
         return;
       } finally {
+        startingRef.current = false;
+        setStarting(false);
         setIsLoading(false);
       }
     }
@@ -532,6 +539,7 @@ export default function App() {
     subtitles: ParsedFtpItem[],
     seasons?: SeasonFolderInfo[]
   ) => {
+              if (startingRef.current) return;
               let playVideo = video;
               let playList = playlist;
               let playSubs = subtitles;
@@ -548,6 +556,8 @@ export default function App() {
                   playVideo = { ...video, url: cached, isDirectory: false };
                   playList = [playVideo];
                 } else {
+                  startingRef.current = true;
+                  setStarting(true);
                   try {
                     const resolved = await resolvePlayableFromFolder(video);
                     if (resolved.primaryVideo) {
@@ -559,6 +569,8 @@ export default function App() {
                       saveCachedPlayableUrl(video.url, resolved.primaryVideo.url);
                     }
                   } catch {}
+                  startingRef.current = false;
+                  setStarting(false);
                 }
               }
 
@@ -696,7 +708,7 @@ export default function App() {
           onPlayDirect={handlePlayDirect}
           onDetailPlay={handleDetailPlay}
           playerOpen={!!activePlayerState}
-          busy={isLoading && !isDeepScanning}
+          busy={starting || (isLoading && !isDeepScanning)}
           onAddSource={handleAddSource}
           onRemoveSource={handleRemoveSource}
           onActivateSource={handleActivateSource}

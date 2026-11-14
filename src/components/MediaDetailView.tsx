@@ -218,6 +218,23 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
 
   const posterUrl = enrichedMeta?.posterUrl || item.posterUrl;
   const backdropUrl = enrichedMeta?.backdropUrl || posterUrl;
+  // Play pressed while the stream is still being scanned: remember it and start by itself as soon as it is ready
+  const [autoPlay, setAutoPlay] = useState(false);
+  const doPlay = () => {
+    if (isSeries) {
+      onPlayItem(effectivePlayable, episodes.length > 0 ? episodes : [effectivePlayable], subtitles, seasons);
+    } else {
+      const playableItem = resolvedMovie || (movieFiles.length > 0 ? movieFiles[0] : item);
+      onPlayItem(playableItem, movieFiles.length > 0 ? movieFiles : [playableItem], subtitles);
+    }
+  };
+  useEffect(() => {
+    if (autoPlay && !isLoading) {
+      setAutoPlay(false);
+      doPlay();
+    }
+  }, [autoPlay, isLoading]);
+
   // real IMDb score (Cinemeta) + optional Rotten Tomatoes (OMDb key) — the server's own "rating" is only a TV-site score
   const ratings = useRatings({
     kind: isSeries ? 'series' : 'movie',
@@ -421,22 +438,15 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                 </button>
               ) : isLoading ? (
                 <button
-                  disabled
-                  className="bg-[#E5A00D]/70 text-black font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-lg cursor-not-allowed opacity-80"
+                  onClick={() => setAutoPlay(true)}
+                  className="bg-[#E5A00D] text-black font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-lg cursor-pointer"
                 >
                   <Loader2 className="w-4 h-4 fill-black animate-spin" />
-                  <span>Scanning stream...</span>
+                  <span>{autoPlay ? 'Starting…' : 'Play'}</span>
                 </button>
               ) : (
                 <button
-                  onClick={() => {
-                    if (isSeries) {
-                      onPlayItem(effectivePlayable, episodes.length > 0 ? episodes : [effectivePlayable], subtitles, seasons);
-                    } else {
-                      const playableItem = resolvedMovie || (movieFiles.length > 0 ? movieFiles[0] : item);
-                      onPlayItem(playableItem, movieFiles.length > 0 ? movieFiles : [playableItem], subtitles);
-                    }
-                  }}
+                  onClick={doPlay}
                   className="bg-[#E5A00D] hover:bg-[#F59E0B] text-black font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-black" />

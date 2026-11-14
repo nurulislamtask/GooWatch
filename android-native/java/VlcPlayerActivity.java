@@ -17,6 +17,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.view.GestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -43,6 +45,8 @@ import org.json.JSONObject;
 import org.videolan.libvlc.LibVLC;
 import org.videolan.libvlc.Media;
 import org.videolan.libvlc.MediaPlayer;
+import org.videolan.libvlc.RendererDiscoverer;
+import org.videolan.libvlc.RendererItem;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -134,6 +138,14 @@ public class VlcPlayerActivity extends AppCompatActivity {
             ui.postDelayed(this, 500);
         }
     };
+    // screen lock (touches are ignored until Unlock is pressed) and casting (Chromecast / DLNA TVs on the same Wi-Fi)
+    private boolean locked = false;
+    private TextView unlockBtn;
+    private final Runnable hideUnlock = () -> { if (unlockBtn != null) unlockBtn.setVisibility(View.GONE); };
+    private final ArrayList<RendererDiscoverer> discoverers = new ArrayList<>();
+    private final ArrayList<RendererItem> renderers = new ArrayList<>();
+    private RendererItem castTo = null;
+    private WifiManager.MulticastLock mcLock;
     private final Runnable hideBars = () -> setBars(false);
     private final Runnable hudOff = () -> hud.setVisibility(View.GONE);
 
@@ -209,6 +221,12 @@ public class VlcPlayerActivity extends AppCompatActivity {
         TextView videosBtn = plain("\u25A4   Videos", 15f);
         videosBtn.setOnClickListener(v -> showEpisodes());
         topBar.addView(videosBtn, gap());
+        TextView lockTop = plain("\uD83D\uDD12   Lock", 15f);
+        lockTop.setOnClickListener(v -> setLocked(true));
+        topBar.addView(lockTop, gap());
+        TextView castTop = plain("\uD83D\uDCFA   Cast", 15f);
+        castTop.setOnClickListener(v -> castMenu());
+        topBar.addView(castTop, gap());
         root.addView(topBar, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
 
@@ -310,6 +328,20 @@ public class VlcPlayerActivity extends AppCompatActivity {
         hud.setVisibility(View.GONE);
         root.addView(hud, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+
+        // ---- "Unlock" button (appears when you tap a locked screen)
+        unlockBtn = plain("\uD83D\uDD13   Unlock", 16f);
+        unlockBtn.setPadding(dp(18), dp(12), dp(18), dp(12));
+        GradientDrawable ub = new GradientDrawable();
+        ub.setColor(0xDD000000);
+        ub.setCornerRadius(dp(26));
+        unlockBtn.setBackground(ub);
+        unlockBtn.setVisibility(View.GONE);
+        unlockBtn.setOnClickListener(v -> setLocked(false));
+        FrameLayout.LayoutParams ulp = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER_VERTICAL | Gravity.START);
+        ulp.leftMargin = dp(28);
+        root.addView(unlockBtn, ulp);
 
         // ---- "Videos" side panel (seasons + episodes)
         panelHolder = new FrameLayout(this);
@@ -706,6 +738,10 @@ public class VlcPlayerActivity extends AppCompatActivity {
             }
         });
         surface.setOnTouchListener((v, e) -> {
+            if (locked) {
+                if (e.getActionMasked() == MotionEvent.ACTION_UP) showUnlock();
+                return true;
+            }
             gd.onTouchEvent(e);
             if (e.getActionMasked() == MotionEvent.ACTION_UP || e.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                 if (gesture == 3 && mp != null) mp.setTime(seekTarget);
@@ -718,6 +754,99 @@ public class VlcPlayerActivity extends AppCompatActivity {
     }
 
     // ------------------------------------------------------------ menus, rotate, episodes panel
+
+    // ------------------------------------------------------------ lock
+
+    private void setLocked(boolean on) {
+        locked = on;
+        ui.removeCallbacks(hideUnlock);
+        unlockBtn.setVisibility(View.GONE);
+        if (on) {
+            hideEpisodes();
+            setBars(false);
+            showHud("Screen locked\nTap the screen to show Unlock");
+        } else {
+            setBars(true);
+            showHud("Unlocked");
+        }
+    }
+
+    private void showUnlock() {
+        unlockBtn.setVisibility(View.VISIBLE);
+        ui.removeCallbacks(hideUnlock);
+        ui.postDelayed(hideUnlock, 3000);
+    }
+
+    // ------------------------------------------------------------ cast
+
+    private void startDiscovery() {
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                mcLock = wm.createMulticastLock("goowatch-cast");
+                mcLock.setReferenceCounted(false);
+                mcLock.acquire();
+            }
+        } catch (Throwable ignored) { }
+        try {
+            RendererDiscoverer.Description[] list = RendererDiscoverer.list(libVlc);
+            if (list == null || list.length == 0) { showHud("Cast is not available here"); return; }
+            for (RendererDiscoverer.Description d : list) {
+                RendererDiscoverer rd = new RendererDiscoverer(libVlc, d.name);
+                rd.setEventListener(ev -> {
+                    final RendererItem it = ev.getItem();
+                    if (it == null) return;
+                    if (ev.type == RendererDiscoverer.Event.ItemAdded) {
+                        it.retain();
+                        runOnUiThread(() -> renderers.add(it));
+                    } else if (ev.type == RendererDiscoverer.Event.ItemDeleted) {
+                        runOnUiThread(() -> renderers.remove(it));
+                    }
+                });
+                rd.start();
+                discoverers.add(rd);
+            }
+        } catch (Throwable t) {
+            showHud("Could not search for cast devices");
+        }
+    }
+
+    private void castMenu() {
+        if (libVlc == null || mp == null) return;
+        if (discoverers.isEmpty()) startDiscovery();
+        final ArrayList<String> names = new ArrayList<>();
+        names.add((castTo == null ? "\u2713 " : "") + "This phone");
+        for (RendererItem r : renderers) names.add((r == castTo ? "\u2713 " : "") + r.displayName);
+        String title = renderers.isEmpty() ? "Searching for TVs on your Wi-Fi\u2026" : "Cast to";
+        new AlertDialog.Builder(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog_Alert)
+            .setTitle(title)
+            .setItems(names.toArray(new String[0]), (d, which) -> setCast(which == 0 ? null : renderers.get(which - 1)))
+            .setNegativeButton(renderers.isEmpty() ? "Search again" : "Refresh", (d, w) -> ui.postDelayed(this::castMenu, 2500))
+            .show();
+    }
+
+    private void setCast(RendererItem item) {
+        if (mp == null) return;
+        final long t = Math.max(0L, lastTime);
+        castTo = item;
+        try {
+            mp.stop();
+            mp.setRenderer(item);
+        } catch (Throwable ignored) { }
+        showHud(item == null ? "Playing on this phone" : "Casting to " + item.displayName);
+        playingSeen = false;
+        startMedia(t);
+    }
+
+    private void stopCast() {
+        try {
+            for (RendererDiscoverer d : discoverers) d.stop();
+            for (RendererItem r : renderers) r.release();
+            if (mcLock != null && mcLock.isHeld()) mcLock.release();
+        } catch (Throwable ignored) { }
+        discoverers.clear();
+        renderers.clear();
+    }
 
     private void rotateScreen() {
         boolean land = getResources().getConfiguration().orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
@@ -767,6 +896,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        if (locked) { showUnlock(); showHud("Screen locked"); return; }
         if (panelHolder != null && panelHolder.getVisibility() == View.VISIBLE) { hideEpisodes(); return; }
         super.onBackPressed();
     }
@@ -945,6 +1075,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
 
 
     private void setBars(boolean show) {
+        if (locked && show) return;
         ui.removeCallbacks(hideBars);
         topBar.setVisibility(show ? View.VISIBLE : View.GONE);
         bottomBar.setVisibility(show ? View.VISIBLE : View.GONE);
@@ -1025,6 +1156,7 @@ public class VlcPlayerActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         ui.removeCallbacksAndMessages(null);
+        stopCast();
         try {
             if (mp != null) { mp.stop(); mp.getVLCVout().detachViews(); mp.release(); }
             if (libVlc != null) libVlc.release();
