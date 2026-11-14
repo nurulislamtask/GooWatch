@@ -4,7 +4,8 @@ import { ParsedFtpItem } from '../../utils/ftpParser';
 import { displayTitle } from '../../utils/titleClean';
 import { EnrichedMetadata } from '../../services/ftpClient';
 import { usePosterMeta } from '../usePosterMeta';
-import { useRatings } from '../../services/ratings';
+import { aboveTeen, useRatings } from '../../services/ratings';
+import { useContentMode } from '../safety';
 import { RatingBadge } from './RatingBadge';
 
 interface Props {
@@ -51,6 +52,9 @@ export const MobilePoster: React.FC<Props> = memo(({ item, onOpen, saved, onTogg
   const year = meta?.year || item.year;
   const dual = /dual|multi/i.test(`${item.audioTag || ''} ${item.rawName}`);
   const rating = useRatings(near ? { kind: isSeries ? 'series' : 'movie', title, year, imdbId: meta?.imdbId || item.imdbId } : null, near);
+
+  const posterMode = useContentMode();
+  if (posterMode !== 'all' && aboveTeen(rating)) return null;
 
   return (
     <div ref={ref} className={`relative select-none ${className}`}>

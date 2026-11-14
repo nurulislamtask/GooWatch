@@ -5,6 +5,7 @@ import { catalogGenres, fetchCatalog, homeCatalogs } from '../../extensions/clie
 import { useExtensions } from '../../extensions/store';
 import { useRatings } from '../../services/ratings';
 import { RatingBadge } from './RatingBadge';
+import { aboveTeen } from '../../services/ratings';
 import { useTopSeen } from '../homeSeen';
 import { allowExt, allowExtItem, useContentMode } from '../safety';
 import { usePrefs } from '../prefs';
@@ -21,6 +22,8 @@ export const ExtCard: React.FC<{ item: ExtPreview; onOpen: (p: ExtPreview) => vo
     rateable ? { kind: item.type === 'movie' ? 'movie' : 'series', title: item.name, year: item.year, imdbId: tt, imdb: item.rating } : null,
     true
   );
+  const cardMode = useContentMode();
+  if (cardMode !== 'all' && aboveTeen(r)) return null;
   return (
     <button onClick={() => onOpen(item)} className={`${className} relative text-left active:scale-[0.97] transition-transform`}>
       <div className="relative aspect-[2/3] w-full overflow-hidden rounded-xl bg-[#12151D] ring-1 ring-white/[0.06]">

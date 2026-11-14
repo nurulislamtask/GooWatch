@@ -47,15 +47,6 @@ export const FilterSheet: React.FC<{ value: FilterState; onChange: (f: FilterSta
             </button>
           ))}
         </div>
-        <p className="mt-4 text-[12px] font-bold uppercase tracking-wide text-zinc-500">Age rating</p>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {[['', 'Any'], ['G', 'All ages'], ['PG', 'PG'], ['PG-13', 'PG-13 or lower']].map(([k, l]) => (
-            <button key={k} className={chip(value.age === k)} onClick={() => onChange({ ...value, age: k })}>
-              {l}
-            </button>
-          ))}
-        </div>
-        <p className="mt-1.5 text-[11px] text-zinc-500">Exact ratings need the free OMDb key (Settings → Ratings); without it the genres are used as a guide.</p>
         <p className="mt-4 text-[12px] font-bold uppercase tracking-wide text-zinc-500">Year</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {DECADES.map((d) => (

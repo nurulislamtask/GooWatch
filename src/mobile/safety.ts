@@ -2,6 +2,7 @@
 import { ParsedFtpItem } from '../utils/ftpParser';
 import { peekItemMetadata } from '../services/ftpClient';
 import { ExtPreview, InstalledExt } from '../extensions/types';
+import { aboveTeen, peekRating } from '../services/ratings';
 import { readPrefs, usePrefs, writePrefs } from './prefs';
 
 import { askText, tellText } from './ui/AskDialog';
@@ -29,6 +30,9 @@ export function allowLibraryItem(item: ParsedFtpItem, mode: ContentMode = curren
   const meta = peekItemMetadata(item);
   const genres = (item.genres && item.genres.length ? item.genres : meta?.genres || []).map((g) => g.toLowerCase());
   if (SCARY.test(text) || genres.includes('horror')) return false;
+  // Family and Kids: nothing rated above PG-13 (R, TV-MA ...)
+  const rr = peekRating({ kind: item.mediaKind === 'movie' ? 'movie' : 'series', title: item.cleanTitle || item.rawName, year: item.year });
+  if (aboveTeen(rr) || genres.includes('adult')) return false;
   if (mode === 'family') return true;
   // kids
   if (genres.some((g) => SCARY_GENRES.includes(g))) return false;
@@ -43,6 +47,8 @@ export function allowExtItem(p: ExtPreview, mode: ContentMode = currentMode(), t
   if (ADULT.test(p.name) || SCARY.test(p.name)) return false;
   const genres = (p.genres || []).map((g) => g.toLowerCase());
   if (genres.includes('horror') || genres.includes('adult')) return false;
+  const tt = p.id.match(/^tt\d{6,}/)?.[0];
+  if (aboveTeen(peekRating({ kind: p.type === 'movie' ? 'movie' : 'series', title: p.name, year: p.year, imdbId: tt, imdb: p.rating }))) return false;
   if (mode === 'family') return true;
   if (genres.some((g) => SCARY_GENRES.includes(g))) return false;
   if (genres.some((g) => KIDS_GENRES.map((k) => k.toLowerCase()).includes(g))) return true;

@@ -135,6 +135,11 @@ async function rottenById(id: string, key: string): Promise<{ rt?: string; rated
 }
 
 const LEVEL: Record<string, number> = { G: 1, 'TV-Y': 1, 'TV-Y7': 1, 'TV-G': 1, PG: 2, 'TV-PG': 2, 'PG-13': 3, 'TV-14': 3, R: 4, 'TV-MA': 4, 'NC-17': 5, X: 5 };
+/** True when the title is rated above PG-13 (R, TV-MA, NC-17 ...). Unknown ratings are not judged here. */
+export function aboveTeen(r: Rating | undefined): boolean {
+  const lv = r?.rated ? LEVEL[r.rated.toUpperCase()] : undefined;
+  return !!lv && lv > 3;
+}
 /** Age limit asked for: 'G' (all ages), 'PG', 'PG-13'. Without an OMDb key the genres are used as a rough guide. */
 export function ageOk(r: Rating | undefined, limit: string): boolean {
   if (!limit) return true;
