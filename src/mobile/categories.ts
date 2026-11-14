@@ -39,3 +39,22 @@ export function takePendingCategory(): Category | null {
   pending = null;
   return c;
 }
+
+// The category that is open right now (so the sidebar and the page can show it).
+import { useEffect, useState } from 'react';
+let active = '';
+const ACTIVE_EVENT = 'gw:active-category';
+export function setActiveCategory(id: string) {
+  if (id === active) return;
+  active = id;
+  window.dispatchEvent(new Event(ACTIVE_EVENT));
+}
+export function useActiveCategory(): string {
+  const [, f] = useState(0);
+  useEffect(() => {
+    const cb = () => f((n) => n + 1);
+    window.addEventListener(ACTIVE_EVENT, cb);
+    return () => window.removeEventListener(ACTIVE_EVENT, cb);
+  }, []);
+  return active;
+}

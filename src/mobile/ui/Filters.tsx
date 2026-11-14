@@ -5,13 +5,15 @@ import { registerBack } from '../backStack';
 export interface FilterState {
   minRating: number; // 0 = any
   decade: string; // '' = any, '2020', '2010', ..., 'old'
+  age: string; // '' = any, 'G' (all ages), 'PG', 'PG-13' (this rating or lower)
 }
-export const NO_FILTER: FilterState = { minRating: 0, decade: '' };
-export const filterActive = (f: FilterState) => f.minRating > 0 || !!f.decade;
+export const NO_FILTER: FilterState = { minRating: 0, decade: '', age: '' };
+export const filterActive = (f: FilterState) => f.minRating > 0 || !!f.decade || !!f.age;
 export const filterLabel = (f: FilterState) =>
-  [f.minRating ? `${f.minRating}+` : '', f.decade ? (f.decade === 'old' ? 'Before 1980' : `${f.decade}s`) : ''].filter(Boolean).join(' · ');
+  [f.age ? `${f.age} or lower` : '', f.minRating ? `${f.minRating}+` : '', f.decade ? (f.decade === 'old' ? 'Before 1980' : `${f.decade}s`) : ''].filter(Boolean).join(' · ');
 
-export function passFilter(f: FilterState, rating: number, year: number): boolean {
+export function passFilter(f: FilterState, rating: number, year: number, ageOk = true): boolean {
+  if (f.age && !ageOk) return false;
   if (f.minRating && !(rating >= f.minRating)) return false;
   if (f.decade) {
     if (!year) return false;
@@ -45,6 +47,15 @@ export const FilterSheet: React.FC<{ value: FilterState; onChange: (f: FilterSta
             </button>
           ))}
         </div>
+        <p className="mt-4 text-[12px] font-bold uppercase tracking-wide text-zinc-500">Age rating</p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {[['', 'Any'], ['G', 'All ages'], ['PG', 'PG'], ['PG-13', 'PG-13 or lower']].map(([k, l]) => (
+            <button key={k} className={chip(value.age === k)} onClick={() => onChange({ ...value, age: k })}>
+              {l}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11px] text-zinc-500">Exact ratings need the free OMDb key (Settings → Ratings); without it the genres are used as a guide.</p>
         <p className="mt-4 text-[12px] font-bold uppercase tracking-wide text-zinc-500">Year</p>
         <div className="mt-2 flex flex-wrap gap-2">
           {DECADES.map((d) => (

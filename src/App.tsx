@@ -1,3 +1,4 @@
+import { SOURCE_CATALOG } from './utils/sourceCatalog';
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Sparkles } from 'lucide-react';
 import { AppSource, ActiveNav, RecentlyPlayedEntry } from './types/cineftp';
@@ -29,7 +30,17 @@ import { MobileShell } from './mobile/ui/MobileShell';
 import { startSyncLoop, stampItem } from './sync/sync';
 
 // GooWatch starts empty: content comes from Extensions (Settings → Extensions). FTP / open-directory servers are optional.
-const INITIAL_SOURCES: AppSource[] = [];
+const REMOVED_DEFAULTS = new Set(['src-lan-3d-movies', 'src-lan-documentary', 'src-lan-wrestling']);
+const toSource = (c: { id: string; name: string; url: string; type: 'movies' | 'series' }): AppSource => ({
+  id: c.id,
+  name: c.name,
+  url: c.url,
+  type: c.type,
+  count: 0,
+  lastSynced: 'Never',
+  status: 'online',
+});
+const INITIAL_SOURCES: AppSource[] = SOURCE_CATALOG.map(toSource);
 
 import {
   SEED_SERIES_CATALOG,
@@ -46,8 +57,22 @@ export default function App() {
       const raw = localStorage.getItem('goowatch_sources_v1');
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // one time: switch on the ready-made servers and drop the 3D / documentary / wrestling ones
+          if (!localStorage.getItem('gw_defaults_v2')) {
+            localStorage.setItem('gw_defaults_v2', '1');
+            const keep = (parsed as AppSource[]).filter((x) => !REMOVED_DEFAULTS.has(x.id));
+            const have = new Set(keep.map((x) => x.id));
+            const merged = [...keep, ...INITIAL_SOURCES.filter((x) => !have.has(x.id))];
+            localStorage.setItem('goowatch_sources_v1', JSON.stringify(merged));
+            return merged;
+          }
+          return parsed;
+        }
       }
+    } catch {}
+    try {
+      localStorage.setItem('gw_defaults_v2', '1');
     } catch {}
     return INITIAL_SOURCES;
   });

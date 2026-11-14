@@ -67,20 +67,51 @@ export function pickTrending(items: ParsedFtpItem[], count: number): ParsedFtpIt
 
 const newest = (a: ParsedFtpItem, b: ParsedFtpItem) => (b.year || 0) - (a.year || 0);
 
-const ContinueCard: React.FC<{ item: ParsedFtpItem; t: number; d: number; by?: string; onPlay: () => void; onRemove: () => void }> = ({
+const ContinueCard: React.FC<{ item: ParsedFtpItem; t: number; d: number; by?: string; onPlay: () => void; onInfo: () => void; onRemove: () => void }> = ({
   item,
   t,
   d,
   by,
   onPlay,
+  onInfo,
   onRemove,
 }) => {
+  // press and hold = information about the title (all episodes, what was watched); a normal tap keeps playing
+  const hold = React.useRef<{ timer?: number; fired: boolean }>({ fired: false });
+  const down = () => {
+    hold.current.fired = false;
+    window.clearTimeout(hold.current.timer);
+    hold.current.timer = window.setTimeout(() => {
+      hold.current.fired = true;
+      try {
+        navigator.vibrate?.(15);
+      } catch {
+        /* ignore */
+      }
+      onInfo();
+    }, 500);
+  };
+  const up = () => window.clearTimeout(hold.current.timer);
   const meta = usePosterMeta(item, true);
   const poster = meta?.backdropUrl || meta?.posterUrl || item.posterUrl;
   const pct = d > 0 ? Math.min(100, Math.max(3, (t / d) * 100)) : 5;
   return (
     <div className="relative w-[62vw] max-w-[280px] shrink-0 snap-start">
-      <button onClick={onPlay} className="block w-full text-left active:scale-[0.97] transition-transform">
+      <button
+        onClick={() => {
+          if (!hold.current.fired) onPlay();
+        }}
+        onPointerDown={down}
+        onPointerUp={up}
+        onPointerLeave={up}
+        onPointerCancel={up}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          onInfo();
+        }}
+        style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
+        className="block w-full text-left active:scale-[0.97] transition-transform"
+      >
         <div className="relative aspect-video overflow-hidden rounded-xl bg-[#12151D] ring-1 ring-white/[0.06]">
           {poster ? (
             <img src={poster} alt="" referrerPolicy="no-referrer" className="h-full w-full object-cover" />
@@ -97,6 +128,7 @@ const ContinueCard: React.FC<{ item: ParsedFtpItem; t: number; d: number; by?: s
         </div>
         <p className="mt-1.5 truncate text-[12.5px] font-medium text-zinc-100">{displayTitle(item.cleanTitle || item.rawName)}</p>
         <p className="text-[11px] text-zinc-500">
+          {item.season !== undefined && item.episode !== undefined ? `S${item.season} E${item.episode} · ` : ''}
           {fmtTime(t)}
           {d > 0 ? ` / ${fmtTime(d)}` : ''}
           {by && by !== deviceLabel() ? ` · on ${by}` : ''}
@@ -173,7 +205,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
   }, [api.recent, prefs.showContinue, api.resumeTick, removedTick, mode]);
 
   const [, force] = React.useReducer((x: number) => x + 1, 0);
-  const card = (it: ParsedFtpItem, cls = 'w-[31vw] max-w-[150px] shrink-0 snap-start') => (
+  const card = (it: ParsedFtpItem, cls = 'w-[31vw] max-w-[150px] sm:w-[148px] md:w-[160px] lg:w-[180px] xl:w-[200px] 2xl:w-[220px] md:max-w-none shrink-0 snap-start') => (
     <MobilePoster
       key={it.id}
       item={it}
@@ -225,6 +257,12 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
               d={c.d}
               by={c.by}
               onPlay={() => api.play(c.item, null)}
+              onInfo={() => {
+                const it = c.item as ParsedFtpItem & { extType?: string; extVideoId?: string };
+                if (it.extType && it.extVideoId)
+                  api.openExt({ id: it.extVideoId.split(':')[0], type: it.extType, name: it.cleanTitle || it.rawName, poster: it.posterUrl, background: it.backdropUrl, year: it.year, addonBase: '' });
+                else api.openDetails(c.item, null);
+              }}
               onRemove={() => {
                 clearResume(c.item.id);
                 bump();

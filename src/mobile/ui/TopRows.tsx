@@ -93,7 +93,7 @@ export const TopRows: React.FC<{ onOpen: (p: ExtPreview) => void }> = ({ onOpen 
       {shelves.map(({ p, k, list }) => (
         <Row key={k} title={p.job.title} subtitle={p.job.subtitle}>
           {list.map((it, i) => (
-            <ExtCard key={it.id} item={it} onOpen={onOpen} rank={p.job.ranked ? i + 1 : undefined} className="w-[31vw] max-w-[150px] shrink-0 snap-start" />
+            <ExtCard key={it.id} item={it} onOpen={onOpen} rank={p.job.ranked ? i + 1 : undefined} className="w-[31vw] max-w-[150px] sm:w-[148px] md:w-[160px] lg:w-[180px] xl:w-[200px] 2xl:w-[220px] md:max-w-none shrink-0 snap-start" />
           ))}
         </Row>
       ))}

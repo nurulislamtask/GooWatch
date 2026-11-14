@@ -12,7 +12,7 @@ import { usePrefs } from '../prefs';
 export const ExtCard: React.FC<{ item: ExtPreview; onOpen: (p: ExtPreview) => void; className?: string; rank?: number }> = ({
   item,
   onOpen,
-  className = 'w-[31vw] max-w-[150px] shrink-0 snap-start',
+  className = 'w-[31vw] max-w-[150px] sm:w-[148px] md:w-[160px] lg:w-[180px] xl:w-[200px] 2xl:w-[220px] md:max-w-none shrink-0 snap-start',
   rank,
 }) => {
   const rateable = item.type === 'movie' || item.type === 'series' || item.type === 'anime';

@@ -13,6 +13,7 @@ export interface Rating {
   rt?: string; // "87%"
   id?: string; // tt1234567
   genres?: string[];
+  rated?: string; // age rating from OMDb: PG-13, R, TV-MA ...
   t: number;
   rtFor?: string; // OMDb key the Rotten Tomatoes value was looked up with
 }
@@ -126,10 +127,25 @@ async function imdbById(kind: string, id: string): Promise<{ imdb?: string; genr
   return { imdb: v ? String(v) : undefined, genres: Array.isArray(r.meta?.genres) ? r.meta.genres.map(String) : undefined };
 }
 
-async function rottenById(id: string, key: string): Promise<string | undefined> {
+async function rottenById(id: string, key: string): Promise<{ rt?: string; rated?: string }> {
   const r = await getJson<any>(`https://www.omdbapi.com/?i=${encodeURIComponent(id)}&apikey=${encodeURIComponent(key)}`, 24 * 3600 * 1000, 10000);
   const row = (r?.Ratings || []).find((x: any) => /rotten/i.test(String(x.Source)));
-  return row?.Value ? String(row.Value) : undefined;
+  const rated = r?.Rated && !/^n\/a$/i.test(String(r.Rated)) ? String(r.Rated) : undefined;
+  return { rt: row?.Value ? String(row.Value) : undefined, rated };
+}
+
+const LEVEL: Record<string, number> = { G: 1, 'TV-Y': 1, 'TV-Y7': 1, 'TV-G': 1, PG: 2, 'TV-PG': 2, 'PG-13': 3, 'TV-14': 3, R: 4, 'TV-MA': 4, 'NC-17': 5, X: 5 };
+/** Age limit asked for: 'G' (all ages), 'PG', 'PG-13'. Without an OMDb key the genres are used as a rough guide. */
+export function ageOk(r: Rating | undefined, limit: string): boolean {
+  if (!limit) return true;
+  const max = limit === 'G' ? 1 : limit === 'PG' ? 2 : 3;
+  const lv = r?.rated ? LEVEL[r.rated.toUpperCase()] : undefined;
+  if (lv) return lv <= max;
+  if (/^(approved|passed)$/i.test(r?.rated || '')) return true;
+  if (!r?.genres) return false; // not checked yet
+  const g = r.genres.map((x) => x.toLowerCase());
+  const adult = g.some((x) => ['horror', 'crime', 'thriller', 'war', 'adult'].includes(x));
+  return max >= 3 ? !g.includes('adult') && !g.includes('horror') : !adult && (max > 1 || g.some((x) => ['family', 'animation'].includes(x)));
 }
 
 const inflight = new Map<string, Promise<Rating | undefined>>();
@@ -165,7 +181,9 @@ export function ensureRating(t: RatingTarget): Promise<Rating | undefined> {
         }
       }
       if (omdb && cur.id && cur.rtFor !== omdb) {
-        cur.rt = await rottenById(cur.id, omdb).catch(() => undefined);
+        const o = await rottenById(cur.id, omdb).catch(() => ({} as { rt?: string; rated?: string }));
+        cur.rt = o.rt;
+        cur.rated = o.rated;
         cur.rtFor = omdb;
       }
       cur.t = Date.now();

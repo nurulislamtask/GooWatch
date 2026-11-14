@@ -9,6 +9,7 @@ import { ExtCard } from './ExtRows';
 import { displayTitle } from '../../utils/titleClean';
 import { allowExt, allowExtItem, allowLibraryItem, useContentMode } from '../safety';
 import { usePrefs } from '../prefs';
+import { expandQuery, titleMatches } from '../../utils/smartSearch';
 
 export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = ({ api, onClose }) => {
   const [q, setQ] = useState('');
@@ -29,9 +30,11 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
       await Promise.all(
         exts.filter((e) => e.enabled && allowExt(e, mode)).flatMap((e) => searchCatalogs(e).slice(0, 3).map(async (c) => {
           try {
-            for (const it of await fetchCatalog(e, c, s)) {
-              const k = `${it.type}:${it.id}`;
-              if (!seen.has(k) && allowExtItem(it, mode)) { seen.add(k); out.push(it); }
+            for (const qq of expandQuery(s)) {
+              for (const it of await fetchCatalog(e, c, qq)) {
+                const k = `${it.type}:${it.id}`;
+                if (!seen.has(k) && allowExtItem(it, mode)) { seen.add(k); out.push(it); }
+              }
             }
           } catch { /* ignore */ }
         }))
@@ -49,9 +52,7 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
       .filter(
         (i) =>
           allowLibraryItem(i, mode) &&
-          (displayTitle(i.cleanTitle).toLowerCase().includes(s) ||
-          i.rawName.toLowerCase().includes(s) ||
-          (i.year && String(i.year) === s))
+          (titleMatches(displayTitle(i.cleanTitle), s) || i.rawName.toLowerCase().includes(s) || (i.year && String(i.year) === s))
       )
       .slice(0, 90);
   }, [q, api.library, mode]);

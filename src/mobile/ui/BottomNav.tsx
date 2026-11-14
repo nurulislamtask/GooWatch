@@ -1,7 +1,7 @@
 import React from 'react';
 import { Home, Compass, Bookmark, Settings } from 'lucide-react';
 import { Tab } from './types';
-import { CATEGORIES, openCategory } from '../categories';
+import { useActiveCategory, CATEGORIES, openCategory } from '../categories';
 import { usePrefs } from '../prefs';
 import { changeMode, genresFor } from '../safety';
 
@@ -17,6 +17,7 @@ export const BottomNav: React.FC<{ tab: Tab; onChange: (t: Tab) => void }> = ({ 
   const [prefs] = usePrefs();
   const allowed = new Set(genresFor(prefs.contentMode, CATEGORIES.map((c) => c.id)));
   const cats = CATEGORIES.filter((c) => allowed.has(c.id) || (c.type && prefs.contentMode !== 'kids'));
+  const activeCat = useActiveCategory();
   const main = TABS.filter((t) => t.id !== 'more');
   const settings = TABS.find((t) => t.id === 'more')!;
   const navBtn = (t: (typeof TABS)[number], desktop: boolean) => {
@@ -66,8 +67,11 @@ export const BottomNav: React.FC<{ tab: Tab; onChange: (t: Tab) => void }> = ({ 
                   onChange('discover');
                   openCategory(c);
                 }}
-                className="block w-full rounded-lg py-2 pl-[54px] pr-3 text-left text-[14px] text-zinc-300 transition-colors hover:bg-white/5 hover:text-white"
+                className={`flex w-full items-center rounded-lg py-2 pl-[54px] pr-3 text-left text-[14px] transition-colors ${
+                  tab === 'discover' && activeCat.toLowerCase() === c.id.toLowerCase() ? 'bg-amber-400/15 font-bold text-amber-300' : 'text-zinc-300 hover:bg-white/5 hover:text-white'
+                }`}
               >
+                {tab === 'discover' && activeCat.toLowerCase() === c.id.toLowerCase() && <span className="-ml-4 mr-2 h-1.5 w-1.5 rounded-full bg-amber-400" />}
                 {c.label}
               </button>
             ))}

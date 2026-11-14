@@ -6,7 +6,7 @@ import { MobilePoster } from './MobilePoster';
 import { ShellApi } from './types';
 import { PickerButton, PickerSheet } from './Pickers';
 import { allowLibraryItem, useContentMode } from '../safety';
-import { peekRating, ensureRating, ratingNumber } from '../../services/ratings';
+import { peekRating, ensureRating, ratingNumber, ageOk } from '../../services/ratings';
 import { CATEGORIES } from '../categories';
 import { FilterSheet, NO_FILTER, FilterState, filterActive, filterLabel, passFilter } from './Filters';
 
@@ -44,7 +44,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
     return [...m.entries()].filter(([n]) => n).sort((a, b) => b[1] - a[1]);
   }, [all]);
 
-  const needLookup = !!genreLocal || filter.minRating > 0;
+  const needLookup = !!genreLocal || filter.minRating > 0 || !!filter.age;
   const [lookTick, setLookTick] = useState(0);
   // genre / rating filters need the score + genres of each title: look them up in the background
   useEffect(() => {
@@ -73,7 +73,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
         return (gs && gs.some((x) => x.toLowerCase() === g)) || (i.sourceServerName || '').toLowerCase().includes(g);
       });
     }
-    if (filterActive(filter)) l = l.filter((i) => passFilter(filter, ratingNumber(peekRating(target(i))?.imdb), Number(i.year) || 0));
+    if (filterActive(filter)) l = l.filter((i) => passFilter(filter, ratingNumber(peekRating(target(i))?.imdb), Number(i.year) || 0, ageOk(peekRating(target(i)), filter.age)));
     l = [...l];
     const t = (i: ParsedFtpItem) => displayTitle(i.cleanTitle);
     if (sort === 'az') l.sort((a, b) => t(a).localeCompare(t(b)));

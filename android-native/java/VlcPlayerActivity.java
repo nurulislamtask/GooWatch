@@ -501,9 +501,26 @@ public class VlcPlayerActivity extends AppCompatActivity {
         if (mp == null) return;
         int n = realTracks(mp.getAudioTracks());
         audioBtn.setText(n > 1 ? "\u266A  Audio Tracks (" + n + ")" : "\u266A  Audio Tracks");
+        if (n > 1 && !englishPicked) pickEnglishAudio();
         if (n > 1 && !audioHint) { audioHint = true; showHud(n + " audio tracks – tap Audio Tracks to choose"); }
     }
     private boolean audioHint = false;
+    private boolean englishPicked = false;
+
+    /** More than one audio track: start with English (the person can still change it from Audio Tracks). */
+    private void pickEnglishAudio() {
+        MediaPlayer.TrackDescription[] l = mp.getAudioTracks();
+        if (l == null) return;
+        for (MediaPlayer.TrackDescription t : l) {
+            if (t.id < 0 || t.name == null) continue;
+            String nm = t.name.toLowerCase();
+            if (nm.contains("english") || nm.matches(".*\\beng\\b.*") || nm.matches(".*\\ben\\b.*")) {
+                englishPicked = true;
+                if (mp.getAudioTrack() != t.id) mp.setAudioTrack(t.id);
+                return;
+            }
+        }
+    }
 
     private void toggle() {
         if (mp == null) return;

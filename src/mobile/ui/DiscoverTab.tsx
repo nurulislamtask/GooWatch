@@ -9,8 +9,9 @@ import { useExtensions } from '../../extensions/store';
 import { ExtCatalog, ExtPreview } from '../../extensions/types';
 import { usePrefs } from '../prefs';
 import { allowExt, allowExtItem, genresFor } from '../safety';
+import { ageOk, ensureRating, peekRating } from '../../services/ratings';
 import { FilterSheet, NO_FILTER, FilterState, filterActive, filterLabel, passFilter } from './Filters';
-import { CATEGORY_EVENT, Category, takePendingCategory } from '../categories';
+import { CATEGORIES, CATEGORY_EVENT, Category, setActiveCategory, takePendingCategory } from '../categories';
 import { ratingNumber } from '../../services/ratings';
 
 const TYPE_LABEL: Record<string, string> = { movie: 'Movies', series: 'Series', anime: 'Anime', tv: 'TV', channel: 'Channels' };
@@ -33,6 +34,14 @@ const yearNum = (y: unknown) => {
   const m = String(y ?? '').match(/(19|20)\d{2}/);
   return m ? parseInt(m[0], 10) : 0;
 };
+
+const extTarget = (it: ExtPreview) => ({
+  kind: (it.type === 'movie' ? 'movie' : 'series') as 'movie' | 'series',
+  title: it.name,
+  year: it.year,
+  imdbId: it.id.match(/^tt\d{6,}/)?.[0],
+  imdb: it.rating,
+});
 
 export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   const [prefs] = usePrefs();
@@ -123,14 +132,32 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
     }
   };
 
+  // the age filter needs each title's genres / age rating: look them up in the background
+  const [ageTick, setAgeTick] = useState(0);
+  useEffect(() => {
+    if (!filter.age) return;
+    let alive = true;
+    let n = 0;
+    items.slice(0, 120).forEach((it) =>
+      ensureRating(extTarget(it)).then(() => {
+        if (alive && ++n % 8 === 0) setAgeTick((x) => x + 1);
+      })
+    );
+    const t = window.setTimeout(() => alive && setAgeTick((x) => x + 1), 2500);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [filter.age, items]);
+
   const shown = useMemo(() => {
     let l = items.filter((it) => allowExtItem(it, mode, mode === 'kids' && !!effGenre));
-    if (filterActive(filter)) l = l.filter((it) => passFilter(filter, ratingNumber(it.rating), yearNum(it.year)));
+    if (filterActive(filter)) l = l.filter((it) => passFilter(filter, ratingNumber(it.rating), yearNum(it.year), ageOk(peekRating(extTarget(it)), filter.age)));
     if (sort === 'rating') l = [...l].sort((a, b) => ratingNumber(b.rating) - ratingNumber(a.rating));
     else if (sort === 'newest') l = [...l].sort((a, b) => yearNum(b.year) - yearNum(a.year));
     else if (sort === 'az') l = [...l].sort((a, b) => a.name.localeCompare(b.name));
     return l;
-  }, [items, sort, mode, effGenre, filter]);
+  }, [items, sort, mode, effGenre, filter, ageTick]);
 
   // ---- a category picked in the PC sidebar / category list ----
   const applyCategory = (c: Category) => {
@@ -161,6 +188,13 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
     return () => window.removeEventListener(CATEGORY_EVENT, take);
   });
 
+  const activeCatId = showServers ? serverGenre : activeType === 'anime' && !genre ? 'Anime' : genre;
+  useEffect(() => {
+    setActiveCategory(activeCatId || '');
+    return () => setActiveCategory('');
+  }, [activeCatId]);
+  const activeCatLabel = CATEGORIES.find((c) => c.id.toLowerCase() === (activeCatId || '').toLowerCase())?.label || activeCatId;
+
   const chips = typeCats.filter((c) => !SORTED_CATALOG_IDS.has(c.cat.id));
   const sortLabel = SORTS.find((s) => s.key === sort)!.label;
 
@@ -169,6 +203,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
       <div className="flex items-center justify-between px-4 pt-4 md:px-6">
         <div className="flex items-center gap-2.5">
           <h1 className="text-[22px] font-extrabold tracking-tight text-white">Discover</h1>
+          {activeCatLabel && <span className="rounded-full bg-amber-400 px-3 py-1 text-[12px] font-extrabold text-black">{activeCatLabel}</span>}
           {mode !== 'all' && (
             <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-extrabold text-emerald-300">{mode === 'kids' ? 'Kids mode' : 'Family mode'}</span>
           )}

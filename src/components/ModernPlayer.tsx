@@ -195,7 +195,20 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
       .then((r) => r.json())
       .then((j) => {
         if (!alive) return;
-        if (j?.audioTracks) setAudios(j.audioTracks);
+        if (j?.audioTracks) {
+          setAudios(j.audioTracks);
+          // several audio tracks: start with English when the first one is another language
+          const list = j.audioTracks as { audioIndex: number; label?: string; language?: string }[];
+          if (list.length > 1) {
+            const isEn = (a: { label?: string; language?: string }) => /\b(eng|en|english)\b/i.test(`${a.language || ''} ${a.label || ''}`);
+            const en = list.find(isEn);
+            if (en && !isEn(list[0])) {
+              setAudioIdx(en.audioIndex);
+              setOffset(startRef.current || 0);
+              setMode('transcode');
+            }
+          }
+        }
         if (Array.isArray(j?.subtitleTracks)) {
           setFileSubs((cur) => [
             ...cur.filter((s) => !s.id.startsWith('emb-')),

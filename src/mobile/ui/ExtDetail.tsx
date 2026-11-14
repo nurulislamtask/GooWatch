@@ -1,3 +1,5 @@
+import { useContentMode } from '../safety';
+import { fmtTime, readGone, readResume } from '../resume';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, Loader2, Play, X } from 'lucide-react';
 import { ExtMeta, ExtPreview, ExtVideo, ResolvedStream } from '../../extensions/types';
@@ -60,15 +62,52 @@ export const ExtDetail: React.FC<{
     [videos, season]
   );
 
+  // Quick play: the best playable stream starts by itself a moment after the first one shows up (tap another one, or close, to stop that)
+  const seq = React.useRef(0);
+  const autoOn = React.useRef(false);
   const pickStreams = (t: Target) => {
+    const my = ++seq.current;
+    autoOn.current = false;
     setTarget(t);
     setStreams([]);
     setPending(1);
     fetchStreams(exts, preview.type, t.videoId, (all, p) => {
+      if (seq.current !== my) return;
       setStreams(all);
       setPending(p);
+      const first = all.find((s) => s.playable && s.url);
+      if (first && !autoOn.current) {
+        autoOn.current = true;
+        window.setTimeout(() => {
+          if (seq.current !== my) return;
+          seq.current++; // nobody else may start now
+          const best = latest.current.find((s) => s.playable && s.url) || first;
+          void start(best, t);
+        }, 1800);
+      }
+      latest.current = all;
     });
   };
+  const latest = React.useRef<ResolvedStream[]>([]);
+
+  const [hintOff, setHintOff] = useState(() => {
+    try {
+      return localStorage.getItem('gw_hide_torrent_hint') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const dismissHint = () => {
+    try {
+      localStorage.setItem('gw_hide_torrent_hint', '1');
+    } catch {
+      /* ignore */
+    }
+    setHintOff(true);
+  };
+  const mode = useContentMode();
+  const resumeMap = useMemo(() => readResume(), [meta, target]);
+  const goneMap = useMemo(() => readGone(), [meta, target]);
 
   const playMain = () => {
     if (episodic) {
@@ -77,13 +116,14 @@ export const ExtDetail: React.FC<{
     } else pickStreams({ videoId: preview.id });
   };
 
-  const start = async (s: ResolvedStream) => {
+  const start = async (s: ResolvedStream, forTarget?: Target) => {
+    seq.current++;
     if (s.external) {
       window.open(s.external, '_blank');
       return;
     }
-    if (!s.playable || !s.url || !target) return;
-    const tg = target;
+    const tg = forTarget || target;
+    if (!s.playable || !s.url || !tg) return;
     const title = meta?.name || preview.name;
     const isEp = tg.episode !== undefined;
     const year = parseInt(String(meta?.year || meta?.releaseInfo || preview.year || ''), 10) || undefined;
@@ -185,6 +225,9 @@ export const ExtDetail: React.FC<{
             <div className="mt-2 grid gap-2 md:grid-cols-2">
               {eps.map((v: ExtVideo) => {
                 const num = v.episode ?? v.number;
+                const rp = resumeMap[`ext:${v.id}`];
+                const pctSeen = rp && rp.d > 0 ? Math.min(100, Math.max(3, (rp.t / rp.d) * 100)) : rp ? 5 : 0;
+                const watched = !rp && !!goneMap[`ext:${v.id}`];
                 return (
                   <button
                     key={v.id}
@@ -194,8 +237,18 @@ export const ExtDetail: React.FC<{
                     <div className="relative h-[68px] w-[120px] shrink-0 overflow-hidden rounded-lg bg-black/40">
                       {(v.thumbnail || meta?.background) && <img src={v.thumbnail || meta?.background} alt="" loading="lazy" className="h-full w-full object-cover" />}
                       <Play className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 fill-white/90 text-white/90" />
+                      {pctSeen > 0 && (
+                        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
+                          <div className="h-full bg-amber-400" style={{ width: `${pctSeen}%` }} />
+                        </div>
+                      )}
                     </div>
                     <div className="min-w-0 py-0.5">
+                      {(rp || watched) && (
+                        <p className="text-[11px] font-bold text-amber-300">
+                          {watched ? '✓ Watched' : `Watched ${fmtTime(rp.t)}${rp.d > 0 ? ` of ${fmtTime(rp.d)}` : ''}`}
+                        </p>
+                      )}
                       <p className="truncate text-[13.5px] font-semibold text-white">
                         {num !== undefined ? `${num}. ` : ''}
                         {v.title || v.name || `Episode ${num ?? ''}`}
@@ -215,7 +268,7 @@ export const ExtDetail: React.FC<{
       </div>
 
       {target && (
-        <div className="fixed inset-0 z-[240] flex items-end bg-black/60 md:items-center md:justify-center" onClick={() => setTarget(null)}>
+        <div className="fixed inset-0 z-[240] flex items-end bg-black/60 md:items-center md:justify-center" onClick={() => { seq.current++; setTarget(null); }}>
           <div
             className="max-h-[78vh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl bg-[#10131B] p-4 md:max-w-xl md:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
@@ -227,7 +280,7 @@ export const ExtDetail: React.FC<{
                   {target.episode !== undefined ? `S${target.season ?? 1}E${target.episode} ${target.epTitle || ''}` : meta?.name || preview.name}
                 </p>
               </div>
-              <button onClick={() => setTarget(null)} aria-label="Close" className="rounded-full p-2 active:bg-white/10">
+              <button onClick={() => { seq.current++; setTarget(null); }} aria-label="Close" className="rounded-full p-2 active:bg-white/10">
                 <X className="h-5 w-5 text-zinc-300" />
               </button>
             </div>
@@ -236,6 +289,7 @@ export const ExtDetail: React.FC<{
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking {pending} extension{pending === 1 ? '' : 's'}…
               </p>
             )}
+            {streams.some((s) => s.playable) && <p className="pb-2 text-[11.5px] text-amber-300/90">Starting the best stream… tap another one to choose it yourself.</p>}
             {(() => {
               const playable = streams.filter((s) => s.playable || s.external);
               const torrents = streams.filter((s) => !s.playable && !s.external);
@@ -259,7 +313,13 @@ export const ExtDetail: React.FC<{
               return (
                 <>
                   {playable.map(row)}
-                  {torrents.length > 0 && (() => {
+                  {torrents.length > 0 && mode !== 'kids' && hintOff && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-[12px] text-zinc-500">{torrents.length} torrent-only streams (not playable without a debrid key)</summary>
+                      <div className="mt-2">{torrents.map(row)}</div>
+                    </details>
+                  )}
+                  {torrents.length > 0 && mode !== 'kids' && !hintOff && (() => {
                     const mine = exts.find((e) => /torrentio/i.test(e.base) && e.enabled && hasConfig(e));
                     return mine ? (
                       <div className="mt-2 rounded-2xl bg-amber-400/[0.07] p-3.5 ring-1 ring-amber-400/20">
@@ -273,6 +333,9 @@ export const ExtDetail: React.FC<{
                           className="mt-3 rounded-xl bg-white/10 px-4 py-2.5 text-[13px] font-extrabold text-white active:scale-95"
                         >
                           Open my Torrentio settings
+                        </button>
+                        <button onClick={dismissHint} className="ml-2 mt-3 rounded-xl px-3 py-2.5 text-[12px] font-semibold text-zinc-400 active:scale-95">
+                          Don’t show again
                         </button>
                         <details className="mt-3">
                           <summary className="cursor-pointer text-[12px] text-zinc-400">Show the torrent list</summary>
@@ -295,6 +358,9 @@ export const ExtDetail: React.FC<{
                         className="mt-3 rounded-xl bg-amber-400 px-4 py-2.5 text-[13px] font-extrabold text-black active:scale-95"
                       >
                         Set up debrid (Torrentio)
+                      </button>
+                      <button onClick={dismissHint} className="ml-2 mt-3 rounded-xl px-3 py-2.5 text-[12px] font-semibold text-zinc-400 active:scale-95">
+                        Don’t show again
                       </button>
                       <details className="mt-3">
                         <summary className="cursor-pointer text-[12px] text-zinc-400">Show the torrent list</summary>
