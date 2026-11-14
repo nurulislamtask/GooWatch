@@ -11,6 +11,7 @@ import { fetchStreams } from '../extensions/client';
 import { getExtensions } from '../extensions/store';
 import type { ResolvedStream } from '../extensions/types';
 import { readPrefs } from '../mobile/prefs';
+import { saveResumePoint } from '../mobile/resume';
 import { withTimeout } from '../utils/withTimeout';
 import { resolvePlayableFromFolder, getCachedPlayableUrl, saveCachedPlayableUrl } from '../services/ftpClient';
 
@@ -34,14 +35,7 @@ function readPositions(): Record<string, { t: number; d: number }> {
   }
 }
 function savePosition(id: string, t: number, d: number) {
-  try {
-    const all = readPositions();
-    if (d > 0 && t > d - 60) delete all[id]; // finished: next time start from the beginning
-    else if (t > 10) all[id] = { t, d };
-    const keys = Object.keys(all);
-    if (keys.length > 600) keys.slice(0, keys.length - 600).forEach((k) => delete all[k]);
-    localStorage.setItem(POS_KEY, JSON.stringify(all));
-  } catch {}
+  saveResumePoint(id, t, d, 60, true);
 }
 
 function titleOf(p: ParsedFtpItem): string {

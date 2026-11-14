@@ -10,6 +10,11 @@ export interface MobilePrefs {
   autoSubtitles: boolean;
   subtitleLang: string; // opensubtitles code: eng, ben, hin ...
   homeHidden: string[]; // source ids that are not shown on Home
+  extensionsOn: boolean; // use add-ons (Stremio / Nuvio) for Discover, Home rows and search
+  contentMode: 'all' | 'family' | 'kids';
+  kidsPin: string; // optional 4-digit PIN needed to leave Kids / Family mode
+  fullscreen: boolean; // Android: hide the status bar and navigation bar
+  omdbKey: string; // optional free OMDb key -> Rotten Tomatoes scores
 }
 
 const DEFAULTS: MobilePrefs = {
@@ -20,6 +25,11 @@ const DEFAULTS: MobilePrefs = {
   autoSubtitles: true,
   subtitleLang: 'eng',
   homeHidden: [],
+  extensionsOn: true,
+  contentMode: 'all',
+  kidsPin: '',
+  fullscreen: true,
+  omdbKey: '',
 };
 
 export function readPrefs(): MobilePrefs {
@@ -28,6 +38,15 @@ export function readPrefs(): MobilePrefs {
   } catch {
     return { ...DEFAULTS };
   }
+}
+
+/** Changes settings from outside a component (add-on install, mode switch…). */
+export function writePrefs(patch: Partial<MobilePrefs>) {
+  const next = { ...readPrefs(), ...patch };
+  try {
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {}
+  window.dispatchEvent(new Event('cineftp:prefs'));
 }
 
 export function usePrefs(): [MobilePrefs, (patch: Partial<MobilePrefs>) => void] {

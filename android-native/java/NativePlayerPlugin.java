@@ -39,6 +39,17 @@ public class NativePlayerPlugin extends Plugin {
         call.resolve(r);
     }
 
+    /** Hides / shows the status bar and navigation bar of the main screen. */
+    @PluginMethod
+    public void setImmersive(PluginCall call) {
+        final boolean on = Boolean.TRUE.equals(call.getBoolean("on", true));
+        MainActivity.immersive = on;
+        if (getActivity() != null) {
+            getActivity().runOnUiThread(() -> MainActivity.applyImmersive(getActivity()));
+        }
+        call.resolve();
+    }
+
     @PluginMethod
     public void play(PluginCall call) {
         JSArray items = call.getArray("items");

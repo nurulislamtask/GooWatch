@@ -5,6 +5,9 @@ import { MobilePoster } from './MobilePoster';
 import { Hero } from './Hero';
 import { ExtHero } from './ExtHero';
 import { ExtRows } from './ExtRows';
+import { TopRows } from './TopRows';
+import { allowLibraryItem, useContentMode } from '../safety';
+import { deviceLabel } from '../resume';
 import { openAddonStore } from '../../extensions/catalog';
 import { useExtensions } from '../../extensions/store';
 import { Puzzle } from 'lucide-react';
@@ -63,10 +66,11 @@ export function pickTrending(items: ParsedFtpItem[], count: number): ParsedFtpIt
 
 const newest = (a: ParsedFtpItem, b: ParsedFtpItem) => (b.year || 0) - (a.year || 0);
 
-const ContinueCard: React.FC<{ item: ParsedFtpItem; t: number; d: number; onPlay: () => void; onRemove: () => void }> = ({
+const ContinueCard: React.FC<{ item: ParsedFtpItem; t: number; d: number; by?: string; onPlay: () => void; onRemove: () => void }> = ({
   item,
   t,
   d,
+  by,
   onPlay,
   onRemove,
 }) => {
@@ -94,6 +98,7 @@ const ContinueCard: React.FC<{ item: ParsedFtpItem; t: number; d: number; onPlay
         <p className="text-[11px] text-zinc-500">
           {fmtTime(t)}
           {d > 0 ? ` / ${fmtTime(d)}` : ''}
+          {by && by !== deviceLabel() ? ` · on ${by}` : ''}
         </p>
       </button>
       <button
@@ -113,7 +118,8 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
   scanning,
   progress,
 }) => {
-  const { library } = api;
+  const mode = useContentMode();
+  const library = useMemo(() => (mode === 'all' ? api.library : api.library.filter((i) => allowLibraryItem(i, mode))), [api.library, mode]);
 
   const hidden = useMemo(() => {
     const ids = new Set(prefs.homeHidden);
@@ -146,10 +152,10 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
     if (!prefs.showContinue) return [];
     const resume = readResume();
     return api.recent
-      .filter((r) => resume[r.id] && resume[r.id].t > 10)
+      .filter((r) => resume[r.id] && resume[r.id].t > 10 && allowLibraryItem(r.video, mode))
       .slice(0, 12)
       .map((r) => ({ item: r.video, ...resume[r.id] }));
-  }, [api.recent, prefs.showContinue, api.resumeTick, removedTick]);
+  }, [api.recent, prefs.showContinue, api.resumeTick, removedTick, mode]);
 
   const [, force] = React.useReducer((x: number) => x + 1, 0);
   const card = (it: ParsedFtpItem, cls = 'w-[31vw] max-w-[150px] shrink-0 snap-start') => (
@@ -167,7 +173,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
     <div className="pb-4">
       <div className="relative">
         {hero.length === 0 ? (
-          <ExtHero onOpen={api.openExt} auto={prefs.heroAutoSlide} />
+          prefs.extensionsOn ? <ExtHero onOpen={api.openExt} auto={prefs.heroAutoSlide} /> : <div className="h-20" />
         ) : (
         <Hero
           items={hero}
@@ -202,6 +208,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
               item={c.item}
               t={c.t}
               d={c.d}
+              by={c.by}
               onPlay={() => api.play(c.item, null)}
               onRemove={() => {
                 clearResume(c.item.id);
@@ -229,12 +236,13 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
         </Row>
       )}
 
-      <AddonBanner />
+      {prefs.extensionsOn && mode === 'all' && <AddonBanner />}
+      {prefs.extensionsOn && <TopRows onOpen={api.openExt} />}
       <ExtRows onOpen={api.openExt} />
 
       {library.length === 0 && (
         <p className="px-6 pt-10 text-center text-sm text-zinc-500">
-          {scanning ? 'Loading your library for the first time…' : 'Tip: open the add-on store to install movies, series and anime add-ons.'}
+          {scanning ? 'Loading your library for the first time…' : prefs.extensionsOn ? 'Tip: open the add-on store to install movies, series and anime add-ons.' : 'Add a server in Settings → My servers to fill your library.'}
         </p>
       )}
     </div>

@@ -3,11 +3,13 @@ import { ShellApi } from './types';
 import { MobilePoster } from './MobilePoster';
 import { ExtCard } from './ExtRows';
 import { useExtSaved } from '../../extensions/library';
+import { allowExtItem, allowLibraryItem, useContentMode } from '../safety';
 
 export const ListTab: React.FC<{ api: ShellApi }> = ({ api }) => {
-  const extSaved = useExtSaved();
+  const mode = useContentMode();
+  const extSaved = useExtSaved().filter((p) => allowExtItem(p, mode));
   const [seg, setSeg] = useState<'list' | 'history'>('list');
-  const items = seg === 'list' ? api.watchlist : api.recent.map((r) => r.video);
+  const items = (seg === 'list' ? api.watchlist : api.recent.map((r) => r.video)).filter((i) => allowLibraryItem(i, mode));
   const seg_ = (a: boolean) =>
     `flex-1 rounded-lg py-2 text-[13px] font-semibold ${a ? 'bg-amber-400 text-black' : 'text-zinc-300'}`;
   return (

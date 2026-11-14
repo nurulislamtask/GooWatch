@@ -1,3 +1,4 @@
+import { writePrefs } from '../prefs';
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, Puzzle, ShieldAlert, X } from 'lucide-react';
 import { ExtPreviewInfo, installExtension, previewExtension } from '../../extensions/store';
@@ -27,6 +28,7 @@ export const InstallPrompt: React.FC<{ address: string; onClose: () => void }> =
     setErr('');
     try {
       await installExtension(address);
+      writePrefs({ extensionsOn: true });
       setDone(true);
       setTimeout(onClose, 1400);
     } catch (e: any) {

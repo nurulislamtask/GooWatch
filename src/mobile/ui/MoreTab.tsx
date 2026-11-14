@@ -23,6 +23,10 @@ import { SourceCatalog } from './SourceCatalog';
 import { fetchLatestRelease, isNewer } from '../../components/AppUpdatePrompt';
 import { NativePlayer } from '../nativePlayer';
 import { AboutPanel } from '../../components/AboutPanel';
+import { SyncPanel } from './SyncPanel';
+import { changeMode } from '../safety';
+import { openAddonStore } from '../../extensions/catalog';
+import { IS_CAPACITOR } from '../../utils/platform';
 
 interface Props {
   sources: AppSource[];
@@ -140,15 +144,84 @@ export const MoreTab: React.FC<Props> = (p) => {
       )}
 
       {showExt && <ExtManager onClose={() => setShowExt(false)} />}
+      <Section title="Who is watching">
+        <div className="px-4 py-4">
+          <div className="flex rounded-xl bg-white/[0.07] p-1">
+            {([['all', 'Normal'], ['family', 'Family'], ['kids', 'Kids']] as const).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => changeMode(m)}
+                className={`flex-1 rounded-lg py-2 text-[13px] font-bold ${p.prefs.contentMode === m ? (m === 'all' ? 'bg-amber-400 text-black' : 'bg-emerald-400 text-black') : 'text-zinc-300'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2.5 text-[12px] leading-relaxed text-zinc-500">
+            <b className="text-zinc-300">Family</b> hides adult and horror titles. <b className="text-zinc-300">Kids</b> shows only cartoons / family titles and asks for a 4-digit PIN to leave (you set it the first time).
+            Titles are judged by their genre and name, so it is a helpful filter, not a guarantee.
+          </p>
+          {p.prefs.contentMode !== 'all' && p.prefs.kidsPin && (
+            <button
+              onClick={() => {
+                const v = window.prompt('Enter the current PIN to remove it');
+                if (v !== null && v.trim() === p.prefs.kidsPin) p.setPrefs({ kidsPin: '' });
+                else if (v !== null) window.alert('Wrong PIN');
+              }}
+              className="mt-2 text-[12px] font-semibold text-zinc-400 underline"
+            >
+              Remove PIN
+            </button>
+          )}
+        </div>
+      </Section>
+
       <Section title="Extensions">
         <Line
           icon={<Puzzle className="h-5 w-5" />}
-          title="Manage extensions"
-          hint="Add movies, series, anime & streams from extensions"
-          onClick={() => setShowExt(true)}
-          right={<ChevronRight className="h-4 w-4 text-zinc-500" />}
+          title="Use extensions"
+          hint="On: Discover, Home shelves, Top 10 and search use your add-ons. Off: only My servers are shown."
+          right={<Toggle on={p.prefs.extensionsOn} onChange={(v) => p.setPrefs({ extensionsOn: v })} />}
         />
+        {p.prefs.extensionsOn && p.prefs.contentMode !== 'kids' && (
+          <>
+            <Line title="Manage extensions" hint="Add movies, series, anime & streams from extensions" onClick={() => setShowExt(true)} right={<ChevronRight className="h-4 w-4 text-zinc-500" />} />
+            <Line title="Add-on store" hint="Recommended add-ons, one tap to install" onClick={openAddonStore} right={<ChevronRight className="h-4 w-4 text-zinc-500" />} />
+          </>
+        )}
       </Section>
+
+      <Section title="Sync across devices">
+        <SyncPanel />
+      </Section>
+
+      <Section title="Ratings">
+        <div className="px-4 py-3.5">
+          <p className="text-[14px] font-medium text-zinc-100">Rotten Tomatoes score (optional)</p>
+          <p className="mt-0.5 text-[11.5px] leading-snug text-zinc-500">
+            IMDb scores show on every title automatically. For Rotten Tomatoes, paste a free key from omdbapi.com (it takes a minute, 1,000 lookups a day).
+          </p>
+          <input
+            defaultValue={p.prefs.omdbKey}
+            onBlur={(e) => p.setPrefs({ omdbKey: e.target.value.trim() })}
+            placeholder="OMDb key, e.g. a1b2c3d4"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            className="mt-2 w-full rounded-xl bg-white/[0.07] px-3.5 py-2.5 text-[13px] text-white outline-none ring-1 ring-white/[0.06] placeholder:text-zinc-500 focus:ring-amber-400/50"
+          />
+        </div>
+      </Section>
+
+      {IS_CAPACITOR && (
+        <Section title="Display">
+          <Line
+            title="Full screen"
+            hint="Hide the status bar and navigation bar. Swipe from the edge to show them for a moment."
+            right={<Toggle on={p.prefs.fullscreen} onChange={(v) => p.setPrefs({ fullscreen: v })} />}
+          />
+        </Section>
+      )}
 
       <Section title="Library">
         <Line

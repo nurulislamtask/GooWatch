@@ -6,7 +6,7 @@ import { EnrichedMetadata } from '../../services/ftpClient';
 import { MediaDetailView } from '../../components/MediaDetailView';
 import { registerBack } from '../backStack';
 import { useLibrary } from '../useLibrary';
-import { usePrefs } from '../prefs';
+import { readPrefs, usePrefs } from '../prefs';
 import { BottomNav } from './BottomNav';
 import { HomeTab } from './HomeTab';
 import { DiscoverTab } from './DiscoverTab';
@@ -18,6 +18,9 @@ import { SearchOverlay } from './SearchOverlay';
 import { InstallPrompt } from './InstallPrompt';
 import { AddonStore } from './AddonStore';
 import { STORE_EVENT } from '../../extensions/catalog';
+import { CATEGORY_EVENT } from '../categories';
+import { IS_CAPACITOR } from '../../utils/platform';
+import { NativePlayer } from '../nativePlayer';
 import { useInstallLinks } from '../../extensions/deepLink';
 import { ShellApi, Tab } from './types';
 
@@ -46,16 +49,33 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   const [searchOpen, setSearchOpen] = useState(false);
   const [ext, setExt] = useState<ExtPreview | null>(null);
   const [installAddr, setInstallAddr] = useState<string | null>(null);
-  useInstallLinks(setInstallAddr);
+  useInstallLinks((a) => {
+    if (readPrefs().contentMode !== 'kids') setInstallAddr(a); // no add-on installs in Kids mode
+  });
   const [storeOpen, setStoreOpen] = useState(false);
   useEffect(() => {
     const f = () => setStoreOpen(true);
     window.addEventListener(STORE_EVENT, f);
     return () => window.removeEventListener(STORE_EVENT, f);
   }, []);
+  useEffect(() => {
+    const f = () => setTab('discover'); // a category was picked (sidebar): Discover reads it when it opens
+    window.addEventListener(CATEGORY_EVENT, f);
+    return () => window.removeEventListener(CATEGORY_EVENT, f);
+  }, []);
   const [prefs, setPrefs] = usePrefs();
   const lib = useLibrary(props.sources);
+  useEffect(() => {
+    if (IS_CAPACITOR) NativePlayer.setImmersive({ on: prefs.fullscreen }).catch(() => {});
+  }, [prefs.fullscreen]);
   const [resumeTick, setResumeTick] = useState(0);
+
+  // progress arrived from another device
+  useEffect(() => {
+    const f = () => setResumeTick((n) => n + 1);
+    window.addEventListener('gw:resume-changed', f);
+    return () => window.removeEventListener('gw:resume-changed', f);
+  }, []);
 
   // refresh "Continue watching" every time the player closes
   useEffect(() => {
@@ -102,7 +122,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   }, []);
 
   return (
-    <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100 md:pb-10 md:pl-[232px]" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="h-screen w-screen overflow-y-auto overflow-x-hidden bg-[#07080C] pb-24 text-zinc-100 md:pb-10 md:pl-[232px]" style={{ WebkitOverflowScrolling: 'touch', paddingTop: 'env(safe-area-inset-top)' }}>
       {tab === 'home' && <HomeTab api={api} prefs={prefs} scanning={lib.scanning} progress={lib.progress} />}
       {tab === 'discover' && <DiscoverTab api={api} />}
       {tab === 'list' && <ListTab api={api} />}

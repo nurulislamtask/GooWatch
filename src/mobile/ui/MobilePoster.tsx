@@ -4,6 +4,8 @@ import { ParsedFtpItem } from '../../utils/ftpParser';
 import { displayTitle } from '../../utils/titleClean';
 import { EnrichedMetadata } from '../../services/ftpClient';
 import { usePosterMeta } from '../usePosterMeta';
+import { useRatings } from '../../services/ratings';
+import { RatingBadge } from './RatingBadge';
 
 interface Props {
   item: ParsedFtpItem;
@@ -48,6 +50,7 @@ export const MobilePoster: React.FC<Props> = memo(({ item, onOpen, saved, onTogg
   const isSeries = item.mediaKind === 'series';
   const year = meta?.year || item.year;
   const dual = /dual|multi/i.test(`${item.audioTag || ''} ${item.rawName}`);
+  const rating = useRatings(near ? { kind: isSeries ? 'series' : 'movie', title, year, imdbId: meta?.imdbId || item.imdbId } : null, near);
 
   return (
     <div ref={ref} className={`relative select-none ${className}`}>
@@ -80,6 +83,7 @@ export const MobilePoster: React.FC<Props> = memo(({ item, onOpen, saved, onTogg
               </span>
             )}
           </div>
+          <RatingBadge r={rating} className="absolute bottom-1.5 right-1.5 flex-col items-end gap-0.5" />
           {isSeries && (
             <span className="absolute bottom-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold text-cyan-300 backdrop-blur">
               SERIES

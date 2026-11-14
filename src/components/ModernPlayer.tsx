@@ -8,6 +8,7 @@ import type { ParsedFtpItem, PlayerEpisode } from '../utils/ftpParser';
 import { displayTitle } from '../utils/titleClean';
 import { playerEpisodeTitle } from '../mobile/episodeGuide';
 import { buildExtItem, resolveEpisodeItem } from '../extensions/play';
+import { saveResumePoint } from '../mobile/resume';
 import { fetchStreams } from '../extensions/client';
 import { getExtensions } from '../extensions/store';
 import type { ResolvedStream } from '../extensions/types';
@@ -22,12 +23,7 @@ function fmt(s: number) {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`;
 }
 function saveResume(id: string, t: number, d: number) {
-  try {
-    const all = JSON.parse(localStorage.getItem(RESUME_KEY) || '{}');
-    if (d > 0 && t > d - 30) delete all[id];
-    else if (t > 10) all[id] = { t, d };
-    localStorage.setItem(RESUME_KEY, JSON.stringify(all));
-  } catch { /* ignore */ }
+  saveResumePoint(id, t, d, 30);
 }
 function readSaved(id: string): number {
   try { return JSON.parse(localStorage.getItem(RESUME_KEY) || '{}')[id]?.t || 0; } catch { return 0; }
@@ -297,6 +293,9 @@ export const ModernPlayer: React.FC<CinemaPlayerProps> = ({ video, playlist, ini
     ];
     return () => offs.forEach((f) => f());
   }, [mode, offset, dur, isHls]);
+
+  // player closed: push the position to the other devices right away
+  useEffect(() => () => { window.dispatchEvent(new Event('gw:sync-now')); }, []);
 
   // save position
   useEffect(() => {

@@ -7,27 +7,31 @@ import { fetchCatalog, searchCatalogs } from '../../extensions/client';
 import { useExtensions } from '../../extensions/store';
 import { ExtCard } from './ExtRows';
 import { displayTitle } from '../../utils/titleClean';
+import { allowExt, allowExtItem, allowLibraryItem, useContentMode } from '../safety';
+import { usePrefs } from '../prefs';
 
 export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = ({ api, onClose }) => {
   const [q, setQ] = useState('');
   const input = useRef<HTMLInputElement>(null);
   const exts = useExtensions();
+  const mode = useContentMode();
+  const [prefs] = usePrefs();
   const [extResults, setExtResults] = useState<ExtPreview[]>([]);
   const [extBusy, setExtBusy] = useState(false);
   useEffect(() => {
     const s = q.trim();
-    if (s.length < 2) { setExtResults([]); return; }
+    if (s.length < 2 || !prefs.extensionsOn) { setExtResults([]); return; }
     let alive = true;
     setExtBusy(true);
     const t = window.setTimeout(async () => {
       const out: ExtPreview[] = [];
       const seen = new Set<string>();
       await Promise.all(
-        exts.filter((e) => e.enabled).flatMap((e) => searchCatalogs(e).slice(0, 3).map(async (c) => {
+        exts.filter((e) => e.enabled && allowExt(e, mode)).flatMap((e) => searchCatalogs(e).slice(0, 3).map(async (c) => {
           try {
             for (const it of await fetchCatalog(e, c, s)) {
               const k = `${it.type}:${it.id}`;
-              if (!seen.has(k)) { seen.add(k); out.push(it); }
+              if (!seen.has(k) && allowExtItem(it, mode)) { seen.add(k); out.push(it); }
             }
           } catch { /* ignore */ }
         }))
@@ -35,7 +39,7 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
       if (alive) { setExtResults(out.slice(0, 60)); setExtBusy(false); }
     }, 450);
     return () => { alive = false; window.clearTimeout(t); };
-  }, [q, exts.length]);
+  }, [q, exts.length, mode, prefs.extensionsOn]);
   useEffect(() => input.current?.focus(), []);
 
   const results = useMemo(() => {
@@ -44,12 +48,13 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
     return api.library
       .filter(
         (i) =>
-          displayTitle(i.cleanTitle).toLowerCase().includes(s) ||
+          allowLibraryItem(i, mode) &&
+          (displayTitle(i.cleanTitle).toLowerCase().includes(s) ||
           i.rawName.toLowerCase().includes(s) ||
-          (i.year && String(i.year) === s)
+          (i.year && String(i.year) === s))
       )
       .slice(0, 90);
-  }, [q, api.library]);
+  }, [q, api.library, mode]);
 
   return (
     <div className="fixed inset-0 z-[220] overflow-y-auto bg-[#07080C]">

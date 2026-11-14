@@ -46,6 +46,8 @@ function toPreview(o: any, ext: InstalledExt, type: string): ExtPreview | null {
     background: o.background,
     year: o.releaseInfo || o.year,
     addonBase: ext.base,
+    rating: o.imdbRating ? String(o.imdbRating) : undefined,
+    genres: Array.isArray(o.genres) ? o.genres.map(String) : Array.isArray(o.genre) ? o.genre.map(String) : undefined,
   };
 }
 

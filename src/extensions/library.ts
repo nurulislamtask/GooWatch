@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ExtPreview } from './types';
+import { stampItem } from '../sync/sync';
 
 const KEY = 'goowatch_ext_list_v1';
 const subs = new Set<() => void>();
@@ -18,6 +19,7 @@ export function toggleExtSaved(p: ExtPreview) {
   const i = list.findIndex((x) => x.id === p.id);
   if (i >= 0) list.splice(i, 1);
   else list.unshift(p);
+  stampItem('ext', p.id, i >= 0);
   try {
     localStorage.setItem(KEY, JSON.stringify(list.slice(0, 500)));
   } catch {
@@ -30,8 +32,10 @@ export function useExtSaved(): ExtPreview[] {
   useEffect(() => {
     const f = () => force((n) => n + 1);
     subs.add(f);
+    window.addEventListener('gw:sync-applied', f); // another device changed the list
     return () => {
       subs.delete(f);
+      window.removeEventListener('gw:sync-applied', f);
     };
   }, []);
   return read();

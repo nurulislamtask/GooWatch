@@ -29,6 +29,29 @@ export function normalizeBase(input: string): string {
 import { addrQuery, withQuery } from './addr';
 
 let state: InstalledExt[] | null = null;
+
+/** Does this installed add-on carry the user's own configuration (query or a path like /realdebrid=KEY/)? */
+export function hasConfig(e: { base: string; query?: string }): boolean {
+  if (e.query) return true;
+  try {
+    return new URL(e.base).pathname.replace(/\/+$/, '').length > 1 && /[=|%]/.test(new URL(e.base).pathname);
+  } catch {
+    return false;
+  }
+}
+
+/** Adds / updates an add-on. A configured copy is never replaced by a plain one with the same id (that made Torrentio ask to be set up again). */
+function upsert(list: InstalledExt[], e: InstalledExt): InstalledExt {
+  const i = list.findIndex((x) => x.base === e.base || (x.kind !== 'nuvio' && e.kind !== 'nuvio' && x.manifest.id === e.manifest.id));
+  if (i < 0) {
+    list.push(e);
+    return e;
+  }
+  const old = list[i];
+  if (old.base !== e.base && hasConfig(old) && !hasConfig(e)) return old;
+  list[i] = { ...e, enabled: old.enabled };
+  return list[i];
+}
 const listeners = new Set<() => void>();
 
 function load(): InstalledExt[] {
@@ -46,6 +69,7 @@ function load(): InstalledExt[] {
   return state;
 }
 function save() {
+  state = [...(state || [])]; // new array: screens that depend on the list re-render (installed badges, rows)
   try {
     localStorage.setItem(KEY, JSON.stringify(state || []));
   } catch {
@@ -79,11 +103,9 @@ export async function installExtension(input: string, builtin = false, known?: E
   if (known && known.id && known.name && !/^https?:\/\/github\.com\//i.test(raw)) {
     const kbase = normalizeBase(raw);
     const k: InstalledExt = { kind: 'stremio', base: kbase, query: addrQuery(raw) || undefined, manifest: known, enabled: true, builtin };
-    const ki = list.findIndex((e) => e.base === kbase || e.manifest.id === known.id);
-    if (ki >= 0) list[ki] = { ...k, enabled: list[ki].enabled };
-    else list.push(k);
+    const kr = upsert(list, k);
     save();
-    return k;
+    return kr;
   }
 
   // 0b) a normal Stremio manifest is far more common than a Nuvio repo: try it first (fast path)
@@ -94,11 +116,9 @@ export async function installExtension(input: string, builtin = false, known?: E
       const m0: any = await getJson(withQuery(`${b0}/manifest.json`, q0), 0, 12000);
       if (m0 && m0.id && m0.name && !looksLikeCloudStream(m0) && !Array.isArray(m0.scrapers)) {
         const e0: InstalledExt = { kind: 'stremio', base: b0, query: q0 || undefined, manifest: m0 as ExtManifest, enabled: true, builtin };
-        const i0 = list.findIndex((e) => e.base === b0 || e.manifest.id === m0.id);
-        if (i0 >= 0) list[i0] = { ...e0, enabled: list[i0].enabled };
-        else list.push(e0);
+        const r0 = upsert(list, e0);
         save();
-        return e0;
+        return r0;
       }
     } catch {
       /* fall through to the slower detection below */
@@ -150,12 +170,10 @@ export async function installExtension(input: string, builtin = false, known?: E
   }
   if (probe && probe.id && probe.name) manifest = probe as ExtManifest;
   if (!manifest) throw new Error('This address is not a Stremio add-on or a Nuvio provider repository');
-  const i = list.findIndex((e) => e.base === base || e.manifest.id === manifest!.id);
   const ext: InstalledExt = { kind: 'stremio', base, query: query || undefined, manifest, enabled: true, builtin };
-  if (i >= 0) list[i] = { ...ext, enabled: list[i].enabled };
-  else list.push(ext);
+  const res = upsert(list, ext);
   save();
-  return ext;
+  return res;
 }
 
 export interface ExtPreviewInfo {

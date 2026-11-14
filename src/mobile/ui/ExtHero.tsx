@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Info, Play } from 'lucide-react';
 import { ExtPreview } from '../../extensions/types';
-import { fetchCatalog, homeCatalogs } from '../../extensions/client';
+import { catalogGenres, fetchCatalog, homeCatalogs } from '../../extensions/client';
+import { allowExt, allowExtItem, useContentMode } from '../safety';
 import { useExtensions } from '../../extensions/store';
 
 /** Hero slider built from the first extension catalogs (used when there is no server library). */
 export const ExtHero: React.FC<{ onOpen: (p: ExtPreview) => void; auto: boolean }> = ({ onOpen, auto }) => {
   const exts = useExtensions();
+  const mode = useContentMode();
   const [slides, setSlides] = useState<ExtPreview[]>([]);
   const [i, setI] = useState(0);
 
@@ -14,11 +16,17 @@ export const ExtHero: React.FC<{ onOpen: (p: ExtPreview) => void; auto: boolean 
     let alive = true;
     (async () => {
       const out: ExtPreview[] = [];
-      for (const e of exts.filter((x) => x.enabled)) {
+      for (const e of exts.filter((x) => x.enabled && allowExt(x, mode))) {
         for (const c of homeCatalogs(e).slice(0, 2)) {
           try {
-            const r = await fetchCatalog(e, c);
-            out.push(...r.filter((x) => x.background || x.poster).slice(0, 4));
+            let genre: string | undefined;
+            if (mode === 'kids') {
+              const gs = catalogGenres(c);
+              genre = gs.find((g) => /^family$/i.test(g)) || gs.find((g) => /^animation$/i.test(g));
+              if (!genre) continue;
+            }
+            const r = await fetchCatalog(e, c, undefined, { genre });
+            out.push(...r.filter((x) => (x.background || x.poster) && allowExtItem(x, mode, mode === 'kids')).slice(0, 4));
           } catch {
             /* skip */
           }
@@ -31,7 +39,7 @@ export const ExtHero: React.FC<{ onOpen: (p: ExtPreview) => void; auto: boolean 
     return () => {
       alive = false;
     };
-  }, [exts.length]);
+  }, [exts.length, mode]);
 
   useEffect(() => {
     if (!auto || slides.length < 2) return;

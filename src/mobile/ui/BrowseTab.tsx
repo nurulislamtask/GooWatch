@@ -4,17 +4,31 @@ import { ParsedFtpItem } from '../../utils/ftpParser';
 import { displayTitle } from '../../utils/titleClean';
 import { MobilePoster } from './MobilePoster';
 import { ShellApi } from './types';
+import { PickerButton, PickerSheet } from './Pickers';
+import { allowLibraryItem, useContentMode } from '../safety';
+import { peekRating, ensureRating, ratingNumber } from '../../services/ratings';
 
-type Sort = 'latest' | 'az';
+type Sort = 'latest' | 'oldest' | 'az' | 'za' | 'rating';
+const SORTS: { key: Sort; label: string; hint?: string }[] = [
+  { key: 'latest', label: 'Newest first' },
+  { key: 'oldest', label: 'Oldest first' },
+  { key: 'az', label: 'A – Z' },
+  { key: 'za', label: 'Z – A' },
+  { key: 'rating', label: 'Top rated (IMDb)', hint: 'Scores load in the background — the order improves as they arrive' },
+];
+const target = (i: ParsedFtpItem) => ({ kind: (i.mediaKind === 'series' ? 'series' : 'movie') as 'movie' | 'series', title: displayTitle(i.cleanTitle || i.rawName), year: i.year, imdbId: i.imdbId });
 
 /** Movies / Series: filter by source (language / category), sort, and an endless grid. */
 export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = ({ api, kind }) => {
   const [source, setSource] = useState('all');
   const [sort, setSort] = useState<Sort>('latest');
   const [shown, setShown] = useState(60);
+  const [sheet, setSheet] = useState<'' | 'cat' | 'sort'>('');
+  const [ratingTick, setRatingTick] = useState(0);
+  const mode = useContentMode();
   const sentinel = useRef<HTMLDivElement>(null);
 
-  const all = useMemo(() => api.library.filter((i) => i.mediaKind === kind), [api.library, kind]);
+  const all = useMemo(() => api.library.filter((i) => i.mediaKind === kind && allowLibraryItem(i, mode)), [api.library, kind, mode]);
   const sourceNames = useMemo(() => {
     const m = new Map<string, number>();
     all.forEach((i) => m.set(i.sourceServerName || '', (m.get(i.sourceServerName || '') || 0) + 1));
@@ -24,10 +38,32 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
   const list = useMemo(() => {
     let l = source === 'all' ? all : all.filter((i) => i.sourceServerName === source);
     l = [...l];
-    if (sort === 'az') l.sort((a, b) => displayTitle(a.cleanTitle).localeCompare(displayTitle(b.cleanTitle)));
+    const t = (i: ParsedFtpItem) => displayTitle(i.cleanTitle);
+    if (sort === 'az') l.sort((a, b) => t(a).localeCompare(t(b)));
+    else if (sort === 'za') l.sort((a, b) => t(b).localeCompare(t(a)));
+    else if (sort === 'oldest') l.sort((a, b) => (a.year || 9999) - (b.year || 9999));
+    else if (sort === 'rating') l.sort((a, b) => ratingNumber(peekRating(target(b))?.imdb) - ratingNumber(peekRating(target(a))?.imdb));
     else l.sort((a, b) => (b.year || 0) - (a.year || 0));
     return l;
-  }, [all, source, sort]);
+  }, [all, source, sort, ratingTick]);
+
+  // "Top rated": fetch the scores of the first titles in the background and re-sort as they arrive
+  useEffect(() => {
+    if (sort !== 'rating') return;
+    let alive = true;
+    const base = (source === 'all' ? all : all.filter((i) => i.sourceServerName === source)).slice(0, 240);
+    let n = 0;
+    base.forEach((i) =>
+      ensureRating(target(i)).then(() => {
+        if (alive && ++n % 12 === 0) setRatingTick((x) => x + 1);
+      })
+    );
+    const t = window.setTimeout(() => alive && setRatingTick((x) => x + 1), 4000);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+  }, [sort, source, all]);
 
   useEffect(() => setShown(60), [source, sort, kind]);
 
@@ -57,15 +93,13 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
           </button>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto px-4 md:px-6" style={{ scrollbarWidth: 'none' }}>
-          <button className={chip(sort === 'latest')} onClick={() => setSort('latest')}>Latest</button>
-          <button className={chip(sort === 'az')} onClick={() => setSort('az')}>A–Z</button>
-          <span className="mx-1 w-px shrink-0 bg-white/10" />
-          <button className={chip(source === 'all')} onClick={() => setSource('all')}>All</button>
-          {sourceNames.map(([n]) => (
-            <button key={n} className={chip(source === n)} onClick={() => setSource(n)}>
-              {n}
+          <PickerButton label="Categories" value={source === 'all' ? undefined : source} active={source !== 'all'} onClick={() => setSheet('cat')} />
+          <PickerButton label="Sort" value={SORTS.find((x) => x.key === sort)!.label} onClick={() => setSheet('sort')} />
+          {source !== 'all' && (
+            <button className={chip(false)} onClick={() => setSource('all')}>
+              ✕ {source}
             </button>
-          ))}
+          )}
         </div>
       </div>
 
@@ -82,6 +116,16 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series' }> = 
       </div>
       {shown < list.length && <div ref={sentinel} className="h-16" />}
       {list.length === 0 && <p className="px-6 pt-16 text-center text-sm text-zinc-500">Nothing here yet.</p>}
+      {sheet === 'cat' && (
+        <PickerSheet
+          title="Categories"
+          value={source}
+          options={[{ key: 'all', label: 'All', hint: `${all.length.toLocaleString()} titles` }, ...sourceNames.map(([n, c]) => ({ key: n, label: n, hint: `${c.toLocaleString()} titles` }))]}
+          onPick={setSource}
+          onClose={() => setSheet('')}
+        />
+      )}
+      {sheet === 'sort' && <PickerSheet title="Sort by" value={sort} options={SORTS} onPick={(k) => setSort(k as Sort)} onClose={() => setSheet('')} />}
     </div>
   );
 };

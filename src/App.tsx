@@ -26,6 +26,7 @@ import { IS_CAPACITOR } from './utils/platform';
 /** Same modern interface on phone and PC. */
 const NEW_UI = true;
 import { MobileShell } from './mobile/ui/MobileShell';
+import { startSyncLoop, stampItem } from './sync/sync';
 
 // GooWatch starts empty: content comes from Extensions (Settings → Extensions). FTP / open-directory servers are optional.
 const INITIAL_SOURCES: AppSource[] = [];
@@ -100,6 +101,20 @@ export default function App() {
     return [];
   });
 
+  // Other devices (phone / tablet / PC) changed progress, Continue watching or My List: show it here
+  useEffect(() => {
+    startSyncLoop();
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail || {};
+      if (Array.isArray(d.recent)) setRecentlyPlayed(d.recent);
+      if (Array.isArray(d.watch)) setWatchlist(d.watch);
+      window.dispatchEvent(new Event('cineftp:prefs'));
+      window.dispatchEvent(new Event('gw:resume-changed'));
+    };
+    window.addEventListener('gw:sync-applied', on);
+    return () => window.removeEventListener('gw:sync-applied', on);
+  }, []);
+
   // Selected Detail View
   const [selectedMediaItem, setSelectedMediaItem] = useState<{
     item: ParsedFtpItem;
@@ -144,6 +159,7 @@ export default function App() {
   const toggleWatchlist = (item: ParsedFtpItem) => {
     setWatchlist((prev) => {
       const exists = prev.some((i) => i.id === item.id);
+      stampItem('watch', item.id, exists);
       const next = exists ? prev.filter((i) => i.id !== item.id) : [item, ...prev];
       try {
         localStorage.setItem('cineftp_watchlist_v6', JSON.stringify(next));

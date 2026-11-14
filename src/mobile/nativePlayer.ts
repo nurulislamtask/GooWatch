@@ -36,4 +36,5 @@ export const NativePlayer = registerPlugin<{
   frame(options: { url: string }): Promise<{ data: string }>;
   installUpdate(options: { url: string }): Promise<void>;
   getLaunchUrl(): Promise<{ url?: string }>;
+  setImmersive(options: { on: boolean }): Promise<void>;
 }>('NativePlayer');

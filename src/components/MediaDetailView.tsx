@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { ParsedFtpItem } from '../utils/ftpParser';
 import { withTimeout } from '../utils/withTimeout';
+import { useRatings } from '../services/ratings';
+import { RatingBadge } from '../mobile/ui/RatingBadge';
 import { useGuide, episodeName, EpisodeThumb } from '../mobile/episodeGuide';
 import {
   SeasonFolderInfo,
@@ -216,7 +218,13 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
 
   const posterUrl = enrichedMeta?.posterUrl || item.posterUrl;
   const backdropUrl = enrichedMeta?.backdropUrl || posterUrl;
-  const rating = enrichedMeta?.imdbRating || item.imdbRating;
+  // real IMDb score (Cinemeta) + optional Rotten Tomatoes (OMDb key) — the server's own "rating" is only a TV-site score
+  const ratings = useRatings({
+    kind: isSeries ? 'series' : 'movie',
+    title: String(item.cleanTitle || item.rawName).split(' · ')[0],
+    year: enrichedMeta?.year || item.year,
+    imdbId: enrichedMeta?.imdbId || item.imdbId,
+  });
   const yearStr = enrichedMeta?.year
     ? isSeries
       ? `${enrichedMeta.year}–`
@@ -333,12 +341,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                 </span>
               )}
 
-              {rating && (
-                <span className="flex items-center gap-1 text-amber-400 font-bold bg-[#1E1A10] px-2.5 py-0.5 rounded border border-amber-500/20">
-                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                  {rating}
-                </span>
-              )}
+              <RatingBadge r={ratings} big />
 
               <span className="bg-[#1C2230] text-zinc-300 px-2.5 py-0.5 rounded border border-white/5 font-semibold">
                 {effectivePlayable.quality || item.quality || '1080p'}

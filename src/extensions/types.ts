@@ -70,6 +70,8 @@ export interface ExtPreview {
   background?: string;
   year?: string | number;
   addonBase: string;
+  rating?: string; // IMDb rating when the catalog provides it
+  genres?: string[];
 }
 export interface ExtStream {
   url?: string;

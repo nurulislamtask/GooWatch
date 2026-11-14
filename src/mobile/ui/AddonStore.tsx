@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Check, Download, Loader2, Puzzle, Search, Sparkles } from 'lucide-react';
 import { CatalogAddon, fetchAddonCollection, RECOMMENDED } from '../../extensions/catalog';
-import { installExtension, normalizeBase, useExtensions } from '../../extensions/store';
+import { writePrefs } from '../prefs';
+import { hasConfig, installExtension, normalizeBase, useExtensions } from '../../extensions/store';
 
 const FILTERS: [string, string][] = [
   ['all', 'All'],
@@ -40,19 +41,23 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, []);
 
   const installedBases = useMemo(() => new Set(exts.map((e) => e.base)), [exts]);
-  const isInstalled = (url: string) => {
+  // installed = same address, same add-on id, or the user's configured copy of it (…/addon/<settings>/manifest.json)
+  const findInstalled = (url: string, id?: string) => {
     try {
-      return installedBases.has(normalizeBase(url));
+      const b = normalizeBase(url);
+      return exts.find((e) => e.base === b || (id && e.manifest.id === id) || e.base.startsWith(b + '/'));
     } catch {
-      return false;
+      return undefined;
     }
   };
+  const isInstalled = (url: string, id?: string) => !!findInstalled(url, id) || installedBases.has(url);
 
   const install = async (name: string, url: string, manifest?: any) => {
     setBusy(url);
     setMsg(null);
     try {
       await installExtension(url, false, manifest);
+      writePrefs({ extensionsOn: true });
       setMsg({ ok: true, text: `${name} installed` });
       setTimeout(() => setMsg((m) => (m && m.ok ? null : m)), 2500);
     } catch (e: any) {
@@ -74,16 +79,16 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   }, [all, q, filter, showDebrid]);
 
   const Btn: React.FC<{ name: string; url: string; manifest?: any; setup?: boolean }> = ({ name, url, manifest, setup }) =>
-    setup && !isInstalled(url) ? (
+    setup && !isInstalled(url, manifest?.id) ? (
       <button
         onClick={() => window.open(url.replace(/\/manifest\.json.*$/i, '') + '/configure', '_blank')}
         className="flex shrink-0 items-center gap-1.5 rounded-xl bg-white/10 px-3.5 py-2 text-[13px] font-bold text-white active:scale-95"
       >
         Set up
       </button>
-    ) : isInstalled(url) ? (
+    ) : isInstalled(url, manifest?.id) ? (
       <span className="flex shrink-0 items-center gap-1 rounded-xl bg-emerald-500/15 px-3 py-2 text-[12.5px] font-bold text-emerald-300">
-        <Check className="h-4 w-4" /> Installed
+        <Check className="h-4 w-4" /> {(() => { const f = findInstalled(url, manifest?.id); return f && hasConfig(f) ? 'Installed · set up' : 'Installed'; })()}
       </span>
     ) : (
       <button
@@ -136,7 +141,7 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 </p>
                 <p className="line-clamp-2 text-[12px] text-zinc-400">{r.description}</p>
               </div>
-              <Btn name={r.name} url={r.manifestUrl} />
+              <Btn name={r.name} url={r.manifestUrl} setup={r.debrid} />
             </div>
           ))}
         </div>

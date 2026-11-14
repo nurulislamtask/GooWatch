@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, Loader2, Play, Star, X } from 'lucide-react';
+import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, Loader2, Play, X } from 'lucide-react';
 import { ExtMeta, ExtPreview, ExtVideo, ResolvedStream } from '../../extensions/types';
 import { fetchMeta, fetchStreams } from '../../extensions/client';
-import { useExtensions } from '../../extensions/store';
+import { hasConfig, useExtensions } from '../../extensions/store';
+import { useRatings } from '../../services/ratings';
+import { RatingBadge } from './RatingBadge';
 import { isExtSaved, toggleExtSaved, useExtSaved } from '../../extensions/library';
 import { ParsedFtpItem } from '../../utils/ftpParser';
 import { addonSubtitles, buildExtItem, guideFromVideos } from '../../extensions/play';
@@ -106,7 +108,13 @@ export const ExtDetail: React.FC<{
   };
 
   const bg = meta?.background || preview.background || meta?.poster || preview.poster;
-  const rating = meta?.imdbRating;
+  const tt = String(preview.id).match(/^tt\d{6,}/)?.[0];
+  const rated = useRatings(
+    preview.type === 'movie' || preview.type === 'series' || preview.type === 'anime'
+      ? { kind: preview.type === 'movie' ? 'movie' : 'series', title: meta?.name || preview.name, year: meta?.year || meta?.releaseInfo || preview.year, imdbId: tt, imdb: meta?.imdbRating ? String(meta.imdbRating) : preview.rating }
+      : null,
+    true
+  );
 
   return (
     <div className="fixed inset-0 z-[230] overflow-y-auto bg-[#07080C]">
@@ -127,12 +135,7 @@ export const ExtDetail: React.FC<{
             <h1 className="text-[22px] font-extrabold leading-tight text-white md:text-4xl">{meta?.name || preview.name}</h1>
             <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-zinc-300">
               {(meta?.releaseInfo || meta?.year || preview.year) && <span>{meta?.releaseInfo || meta?.year || preview.year}</span>}
-              {rating && (
-                <span className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                  {rating}
-                </span>
-              )}
+              <RatingBadge r={rated} big />
               {meta?.runtime && <span>{meta.runtime}</span>}
               <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10.5px] uppercase">{preview.type}</span>
             </div>
@@ -256,7 +259,27 @@ export const ExtDetail: React.FC<{
               return (
                 <>
                   {playable.map(row)}
-                  {torrents.length > 0 && (
+                  {torrents.length > 0 && (() => {
+                    const mine = exts.find((e) => /torrentio/i.test(e.base) && e.enabled && hasConfig(e));
+                    return mine ? (
+                      <div className="mt-2 rounded-2xl bg-amber-400/[0.07] p-3.5 ring-1 ring-amber-400/20">
+                        <p className="text-[13.5px] font-bold text-amber-300">{torrents.length} torrent-only streams</p>
+                        <p className="mt-1 text-[12px] leading-relaxed text-zinc-300">
+                          Your configured Torrentio is installed, but these results came back as plain torrents. That usually means the debrid key is wrong / expired, or the file is not cached on your debrid yet.
+                          Check your settings once more.
+                        </p>
+                        <button
+                          onClick={() => window.open(`${mine.base}/configure`, '_blank')}
+                          className="mt-3 rounded-xl bg-white/10 px-4 py-2.5 text-[13px] font-extrabold text-white active:scale-95"
+                        >
+                          Open my Torrentio settings
+                        </button>
+                        <details className="mt-3">
+                          <summary className="cursor-pointer text-[12px] text-zinc-400">Show the torrent list</summary>
+                          <div className="mt-2">{torrents.map(row)}</div>
+                        </details>
+                      </div>
+                    ) : (
                     <div className="mt-2 rounded-2xl bg-amber-400/[0.07] p-3.5 ring-1 ring-amber-400/20">
                       <p className="text-[13.5px] font-bold text-amber-300">{torrents.length} torrent streams found — they can’t be played yet</p>
                       <p className="mt-1 text-[12px] leading-relaxed text-zinc-300">
@@ -278,7 +301,8 @@ export const ExtDetail: React.FC<{
                         <div className="mt-2">{torrents.map(row)}</div>
                       </details>
                     </div>
-                  )}
+                    );
+                  })()}
                 </>
               );
             })()}
