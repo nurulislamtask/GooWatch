@@ -1,0 +1,27 @@
+https://github.com/nurulislamtask/GooWatch/releases/tag/v1.0.14
+  • electron-builder  version=26.18.0 os=10.0.26100
+  • loaded configuration  file=package.json ("build" field)
+  • executing @electron/rebuild  electronVersion=39.8.10 arch=x64 buildFromSource=false workspaceRoot=D:\a\GooWatch\GooWatch projectDir=./ appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=39.8.10 appOutDir=release\win-unpacked
+  • downloaded      label=electron progress=100%
+  • downloaded electron zip extracted successfully  output=D:\a\GooWatch\GooWatch\release\win-unpacked
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • searching for node modules  pm=npm searchDir=D:\a\GooWatch\GooWatch
+  • no code signing certificate configured, signing is skipped  path=release\win-unpacked\resources\bin\ffprobe.exe
+  • no code signing certificate configured, signing is skipped  path=release\win-unpacked\resources\bin\ffmpeg.exe
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • no code signing certificate configured, signing is skipped  path=release\win-unpacked\GooWatch.exe
+  • building        target=nsis file=release\GooWatch-Setup-1.0.14.exe archs=x64 oneClick=false perMachine=false
+  • downloaded      label=7zip-win-x64.tar.gz progress=100%
+  • downloaded      label=nsis-3.0.4.1.7z progress=100%
+  • no code signing certificate configured, signing is skipped  path=C:\Users\RUNNER~1\AppData\Local\Temp\t-ayLKsi\elevate-staging-1\resources\elevate.exe
+  • downloaded      label=nsis-resources-3.4.1.7z progress=100%
+  • no code signing certificate configured, signing is skipped  path=release\GooWatch-Setup-1.0.14.__uninstaller.exe
+  • no code signing certificate configured, signing is skipped  path=release\GooWatch-Setup-1.0.14.exe
+  • building block map  blockMapFile=release\GooWatch-Setup-1.0.14.exe.blockmap
+  • publishing      publisher=Github (owner: nurulislamtask, project: GooWatch, version: 1.0.14)
+  • publishing      publisher=Github (owner: nurulislamtask, project: GooWatch, version: 1.0.14)
+  • uploading       file=GooWatch-Setup-1.0.14.exe.blockmap provider=github
+  • uploading       file=GooWatch-Setup-1.0.14.exe provider=github
