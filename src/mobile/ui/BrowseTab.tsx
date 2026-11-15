@@ -20,8 +20,7 @@ const SORTS: { key: Sort; label: string; hint?: string }[] = [
 ];
 const target = (i: ParsedFtpItem) => ({ kind: (i.mediaKind === 'series' ? 'series' : 'movie') as 'movie' | 'series', title: displayTitle(i.cleanTitle || i.rawName), year: i.year, imdbId: i.imdbId });
 
-/** Movies / Series: filter by source (language / category), sort, and an endless grid. */
-export /** Server folder names are technical ("English Movies · 1080p"): show them as plain languages instead. */
+/** Server folder names are technical ("English Movies · 1080p"): show them as plain languages instead. */
 export function langOf(name?: string): string {
   const n = (name || '').toLowerCase();
   if (/bangla|bengali|kolkata/.test(n)) return 'Bangla';
@@ -35,6 +34,7 @@ export function langOf(name?: string): string {
   return name || '';
 }
 
+/** Movies / Series: filter by language and category, sort, and an endless grid. */
 export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genre?: string; onGenre?: (g: string) => void }> = ({ api, kind, genre = '', onGenre }) => {
   const [source, setSource] = useState('all');
   const [filter, setFilter] = useState<FilterState>(NO_FILTER);
