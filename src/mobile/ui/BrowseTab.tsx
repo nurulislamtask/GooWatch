@@ -8,6 +8,8 @@ import { PickerButton, PickerSheet } from './Pickers';
 import { allowLibraryItem, useContentMode } from '../safety';
 import { peekRating, ensureRating, ratingNumber, ageOk } from '../../services/ratings';
 import { CATEGORIES } from '../categories';
+import { INDUSTRY_ORDER, industryOf } from '../../utils/industry';
+import { Row } from './Row';
 import { FilterSheet, NO_FILTER, FilterState, filterActive, filterLabel, passFilter } from './Filters';
 
 type Sort = 'latest' | 'oldest' | 'az' | 'za' | 'rating';
@@ -64,8 +66,8 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
   );
   const sourceNames = useMemo(() => {
     const m = new Map<string, number>();
-    all.forEach((i) => m.set(langOf(i.sourceServerName), (m.get(langOf(i.sourceServerName)) || 0) + 1));
-    return [...m.entries()].filter(([n]) => n).sort((a, b) => b[1] - a[1]);
+    all.forEach((i) => m.set(industryOf(i), (m.get(industryOf(i)) || 0) + 1));
+    return [...m.entries()].filter(([n]) => n).sort((a, b) => (INDUSTRY_ORDER.indexOf(a[0]) + 1 || 99) - (INDUSTRY_ORDER.indexOf(b[0]) + 1 || 99));
   }, [all]);
 
   const needLookup = !!genreLocal || filter.minRating > 0 || !!filter.age;
@@ -75,7 +77,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
     if (!needLookup) return;
     let alive = true;
     let n = 0;
-    const base = (source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source)).slice(0, 1200);
+    const base = (source === 'all' ? all : all.filter((i) => industryOf(i) === source)).slice(0, 1200);
     base.forEach((i) =>
       ensureRating(target(i)).then(() => {
         if (alive && ++n % 10 === 0) setLookTick((x) => x + 1);
@@ -89,7 +91,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
   }, [needLookup, source, all]);
 
   const list = useMemo(() => {
-    let l = source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source);
+    let l = source === 'all' ? all : all.filter((i) => industryOf(i) === source);
     if (genreLocal) {
       const g = genreLocal.toLowerCase();
       l = l.filter((i) => {
@@ -112,7 +114,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
   useEffect(() => {
     if (sort !== 'rating') return;
     let alive = true;
-    const base = (source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source)).slice(0, 240);
+    const base = (source === 'all' ? all : all.filter((i) => industryOf(i) === source)).slice(0, 240);
     let n = 0;
     base.forEach((i) =>
       ensureRating(target(i)).then(() => {
@@ -125,6 +127,20 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
       window.clearTimeout(t);
     };
   }, [sort, source, all]);
+
+  // no filter chosen: show the library in industry sections (newest first) instead of one long mixed grid
+  const sectioned = !group && source === 'all' && !genreLocal && !filterActive(filter) && sort === 'latest';
+  const sections = useMemo(() => {
+    if (!sectioned) return [];
+    const m = new Map<string, ParsedFtpItem[]>();
+    for (const i of all) {
+      const k = industryOf(i);
+      (m.get(k) || m.set(k, []).get(k)!).push(i);
+    }
+    return [...m.entries()]
+      .sort((a, b) => (INDUSTRY_ORDER.indexOf(a[0]) + 1 || 99) - (INDUSTRY_ORDER.indexOf(b[0]) + 1 || 99))
+      .map(([name, v]) => ({ name, count: v.length, items: [...v].sort((a, b) => (b.year || 0) - (a.year || 0)).slice(0, 24) }));
+  }, [sectioned, all]);
 
   useEffect(() => setShown(60), [source, sort, kind]);
 
@@ -155,7 +171,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto px-4 md:px-6" style={{ scrollbarWidth: 'none' }}>
           <PickerButton label="Categories" value={genreLocal || undefined} active={!!genreLocal} onClick={() => setSheet('genre')} />
-          <PickerButton label="Language" value={source === 'all' ? undefined : source} active={source !== 'all'} onClick={() => setSheet('cat')} />
+          <PickerButton label="Industry" value={source === 'all' ? undefined : source} active={source !== 'all'} onClick={() => setSheet('cat')} />
           <PickerButton label="Filter" value={filterActive(filter) ? filterLabel(filter) : undefined} active={filterActive(filter)} onClick={() => setSheet('filter')} />
           <PickerButton label="Sort" value={SORTS.find((x) => x.key === sort)!.label} onClick={() => setSheet('sort')} />
           {source !== 'all' && (
@@ -166,7 +182,15 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
         </div>
       </div>
 
-      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pt-2">
+      {sectioned &&
+        sections.map((sec) => (
+          <Row key={sec.name} title={sec.name} subtitle={`${sec.count.toLocaleString()} titles · newest first`} onMore={() => setSource(sec.name)}>
+            {sec.items.map((it) => (
+              <MobilePoster key={it.id} item={it} className="w-[31vw] max-w-[150px] sm:w-[148px] md:w-[160px] lg:w-[180px] xl:w-[200px] md:max-w-none shrink-0 snap-start" onOpen={api.openDetails} saved={api.isSaved(it.id)} onToggleSave={api.toggleSave} />
+            ))}
+          </Row>
+        ))}
+      <div className={sectioned ? 'hidden' : 'grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pt-2'}>
         {list.slice(0, shown).map((it: ParsedFtpItem) => (
           <MobilePoster
             key={it.id}
@@ -177,11 +201,11 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; grou
           />
         ))}
       </div>
-      {shown < list.length && <div ref={sentinel} className="h-16" />}
+      {!sectioned && shown < list.length && <div ref={sentinel} className="h-16" />}
       {list.length === 0 && <p className="px-6 pt-16 text-center text-sm text-zinc-500">{needLookup ? 'Nothing matches yet — titles are still being checked, or try another filter.' : 'Nothing here yet.'}</p>}
       {sheet === 'cat' && (
         <PickerSheet
-          title="Language"
+          title="Industry"
           value={source}
           options={[{ key: 'all', label: 'All', hint: `${all.length.toLocaleString()} titles` }, ...sourceNames.map(([n, c]) => ({ key: n, label: n, hint: `${c.toLocaleString()} titles` }))]}
           onPick={setSource}

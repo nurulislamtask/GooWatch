@@ -63,7 +63,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   const typeCats = cats.filter((c) => c.cat.type === activeType);
   const [catKey, setCatKey] = useState('');
   const [genre, setGenre] = useState('');
-  const [sort, setSort] = useState<Sort>('popular');
+  const [sort, setSort] = useState<Sort>('newest');
   const [sheet, setSheet] = useState<'' | 'cat' | 'sort' | 'filter'>('');
   const [filter, setFilter] = useState<FilterState>(NO_FILTER);
   const [serverGenre, setServerGenre] = useState('');

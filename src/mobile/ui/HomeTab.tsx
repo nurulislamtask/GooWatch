@@ -35,6 +35,7 @@ const AddonBanner: React.FC = () => {
 import { Row } from './Row';
 import { ShellApi } from './types';
 import { MobilePrefs } from '../prefs';
+import { INDUSTRY_ORDER, industryOf } from '../../utils/industry';
 import { clearResume, fmtTime, readResume } from '../resume';
 import { usePosterMeta } from '../usePosterMeta';
 import { displayTitle } from '../../utils/titleClean';
@@ -175,22 +176,22 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
       }
       return out;
     };
-    const trending = take(pickTrending(homeItems, 40), 20);
-    const movies = take(homeItems.filter((i) => i.mediaKind === 'movie').sort(newest), 24);
-    const series = take(homeItems.filter((i) => i.mediaKind === 'series').sort(newest), 24);
-    const dual = take(homeItems.filter((i) => /dual|multi/i.test(`${i.audioTag || ''} ${i.rawName}`)).sort(newest), 20);
+    // Home shows what is new (last ~3 years), newest first; older titles are in Discover. Real "trending" comes from the add-ons below.
+    const thisYear = new Date().getFullYear();
+    const recent = homeItems.filter((i) => (i.year || 0) >= thisYear - 3);
+    const trending: ParsedFtpItem[] = [];
+    const movies = take(recent.filter((i) => i.mediaKind === 'movie').sort(newest), 24);
+    const series = take(recent.filter((i) => i.mediaKind === 'series').sort(newest), 24);
+    const dual = take(recent.filter((i) => /dual|multi/i.test(`${i.audioTag || ''} ${i.rawName}`)).sort(newest), 20);
     const groups = new Map<string, ParsedFtpItem[]>();
-    for (const it of homeItems) {
-      const k = it.sourceServerName || '';
-      if (!k) continue;
+    for (const it of recent) {
+      const k = industryOf(it);
       (groups.get(k) || groups.set(k, []).get(k)!).push(it);
     }
     const sourceRows = [...groups.entries()]
-      .sort((a, b) => b[1].length - a[1].length)
-      .slice(0, 8)
+      .sort((a, b) => (INDUSTRY_ORDER.indexOf(a[0]) + 1 || 99) - (INDUSTRY_ORDER.indexOf(b[0]) + 1 || 99))
       .map(([name, v]) => ({ name, items: take([...v].sort(newest), 20) }))
-      .filter((r) => r.items.length >= 6)
-      .slice(0, 6);
+      .filter((r) => r.items.length >= 4);
     return { trending, movies, series, dual, sourceRows };
   }, [homeItems, hero]);
 
@@ -274,7 +275,7 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
         </Row>
       )}
 
-      {trending.length > 0 && <Row title="Trending Now" subtitle="Changes through the day">{trending.map((i) => card(i))}</Row>}
+      {prefs.extensionsOn && <TopRows onOpen={api.openExt} />}
       {movies.length > 0 && <Row title="New Movies" onMore={() => api.goTab('discover')}>{movies.map((i) => card(i))}</Row>}
       {series.length > 0 && <Row title="New Series" onMore={() => api.goTab('discover')}>{series.map((i) => card(i))}</Row>}
       {dual.length > 0 && <Row title="Dual Audio">{dual.map((i) => card(i))}</Row>}
@@ -290,7 +291,6 @@ export const HomeTab: React.FC<{ api: ShellApi; prefs: MobilePrefs; scanning: bo
       )}
 
       {prefs.extensionsOn && mode === 'all' && <AddonBanner />}
-      {prefs.extensionsOn && <TopRows onOpen={api.openExt} />}
       <ExtRows onOpen={api.openExt} />
 
       {library.length === 0 && (
