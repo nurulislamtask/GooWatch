@@ -30,6 +30,8 @@ jobs:
   windows:
     needs: version
     runs-on: windows-latest
+    env:
+      VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     outputs:
       repo: ${{ steps.rel.outputs.repo }}
     steps:
@@ -76,6 +78,8 @@ jobs:
     needs: [version, windows]
     if: ${{ needs.windows.result == 'success' }}
     runs-on: ubuntu-latest
+    env:
+      VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -110,6 +114,8 @@ jobs:
     needs: [version, windows]
     if: ${{ needs.windows.result == 'success' }}
     runs-on: ubuntu-24.04
+    env:
+      VITE_GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
