@@ -56,7 +56,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   const types = useMemo(() => [...new Set(cats.map((c) => c.cat.type))], [cats]);
 
   const [view, setView] = useState<'ext' | 'servers' | null>(null); // null = decide automatically
-  const showServers = !extOn || (hasServers && (view ? view === 'servers' : true));
+  const showServers = hasServers; // one page: your servers first, add-on catalogs below it
 
   const [type, setType] = useState('');
   const activeType = type && types.includes(type) ? type : types[0] || '';
@@ -162,7 +162,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   // ---- a category picked in the PC sidebar / category list ----
   const applyCategory = (c: Category) => {
     if (showServers) {
-      // the left Categories list also works for My servers
+      // the left Categories list works for My servers AND the add-on catalogs below
       if (c.type === 'anime' || /^anime$/i.test(c.id)) {
         setServerKind('anime');
         setServerGenre('');
@@ -173,13 +173,8 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
         if (serverKind === 'anime' || serverKind === 'animation') setServerKind('movie');
         setServerGenre(c.id);
       }
-      return;
     }
-    if (!extOn || (types.length === 0 && hasServers)) {
-      setView('servers');
-      setServerGenre(c.type ? '' : c.id);
-      return;
-    }
+    if (!extOn || types.length === 0) return;
     setView('ext');
     setCatKey('');
     if (c.type && types.includes(c.type)) {
@@ -227,19 +222,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
         </button>
       </div>
 
-      {extOn && hasServers && (
-        <div className="mx-4 mt-3 inline-flex rounded-xl bg-white/[0.07] p-1 md:mx-6">
-          <button className={`rounded-lg px-5 py-2 text-[13px] font-semibold ${showServers ? 'bg-amber-400 text-black' : 'text-zinc-300'}`} onClick={() => setView('servers')}>
-            My servers
-          </button>
-          <button className={`rounded-lg px-5 py-2 text-[13px] font-semibold ${!showServers ? 'bg-amber-400 text-black' : 'text-zinc-300'}`} onClick={() => setView('ext')}>
-            Extensions
-          </button>
-        </div>
-      )}
-
-      {showServers ? (
-        hasServers ? (
+      {hasServers && (
           <>
             <div className="flex gap-2 px-4 pt-3 md:px-6">
               <button className={chip(serverKind === 'movie')} onClick={() => setServerKind('movie')}>Movies</button>
@@ -249,12 +232,12 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
             </div>
             <BrowseTab key={serverKind} api={api} kind={serverKind === 'series' || serverKind === 'anime' ? 'series' : 'movie'} group={serverKind === 'anime' || serverKind === 'animation' ? serverKind : undefined} genre={serverGenre} onGenre={setServerGenre} />
           </>
-        ) : (
-          <p className="px-8 pt-16 text-center text-sm text-zinc-500">No server added yet. Open Settings → My servers, or turn on Extensions.</p>
-        )
-      ) : (
+      )}
+      {!hasServers && !extOn && <p className="px-8 pt-16 text-center text-sm text-zinc-500">No server added yet. Open Settings → My servers, or turn on Extensions.</p>}
+      {extOn && (
         <>
-          {types.length === 0 && (
+          {hasServers && types.length > 0 && <h2 className="mt-8 px-4 text-[18px] font-extrabold text-white md:px-6">More from add-ons</h2>}
+          {types.length === 0 && !hasServers && (
             <p className="px-8 pt-16 text-center text-sm text-zinc-500">No extension with catalogs yet. Open Settings → Extensions to install or add one.</p>
           )}
           {types.length > 0 && (
