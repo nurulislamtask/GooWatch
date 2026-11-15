@@ -19,7 +19,7 @@ import { MobilePrefs } from '../prefs';
 import { clearCatalog } from '../catalogCache';
 import { clearResume } from '../resume';
 import { ExtManager } from './ExtManager';
-import { SourceCatalog } from './SourceCatalog';
+import { SOURCE_CATALOG } from '../../utils/sourceCatalog';
 import { fetchLatestRelease, isNewer } from '../../components/AppUpdatePrompt';
 import { NativePlayer } from '../nativePlayer';
 import { AboutPanel } from '../../components/AboutPanel';
@@ -45,9 +45,12 @@ interface Props {
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <section className="mt-6">
-    <h2 className="mb-2 px-5 text-[11.5px] font-bold uppercase tracking-wider text-zinc-500">{title}</h2>
-    <div className="mx-4 divide-y divide-white/[0.05] overflow-hidden rounded-2xl bg-[#0F121A] ring-1 ring-white/[0.05]">{children}</div>
+  <section className="mt-7">
+    <h2 className="mb-2.5 flex items-center gap-2 px-5 text-[12px] font-extrabold uppercase tracking-[0.14em] text-zinc-400">
+      <span className="h-3.5 w-1 rounded-full bg-amber-400" />
+      {title}
+    </h2>
+    <div className="mx-4 divide-y divide-white/[0.06] overflow-hidden rounded-2xl bg-[#11141C] shadow-lg shadow-black/20 ring-1 ring-white/[0.06]">{children}</div>
   </section>
 );
 
@@ -95,6 +98,8 @@ function ago(ts: number) {
 export const MoreTab: React.FC<Props> = (p) => {
   const [showExt, setShowExt] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const builtIn = new Set(SOURCE_CATALOG.map((c) => c.id));
+  const mine = p.sources.filter((x) => !builtIn.has(x.id));
   const [showAdd, setShowAdd] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
   const [name, setName] = useState('');
@@ -130,9 +135,9 @@ export const MoreTab: React.FC<Props> = (p) => {
   };
 
   return (
-    <div className="pb-6">
+    <div className="mx-auto w-full max-w-3xl pb-10">
       <div className="px-5 pt-5">
-        <h1 className="text-[22px] font-extrabold tracking-tight text-white">Settings</h1>
+        <h1 className="text-[24px] font-extrabold tracking-tight text-white">Settings</h1>
         <p className="text-[12px] text-zinc-500">
           GooWatch {typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__ !== '0.0.0' ? `v${__APP_VERSION__}` : ''}
         </p>
@@ -225,13 +230,34 @@ export const MoreTab: React.FC<Props> = (p) => {
         <Line
           icon={<Database className="h-5 w-5" />}
           title="My servers (optional)"
-          hint={`${p.sources.length} servers · ${p.libraryCount.toLocaleString()} titles`}
+          hint={`${p.libraryCount.toLocaleString()} titles${mine.length ? ` · ${mine.length} added by you` : ''}`}
           onClick={() => setShowSources((v) => !v)}
           right={showSources ? <ChevronDown className="h-4 w-4 text-zinc-500" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
         />
         {showSources && (
           <div className="bg-black/20">
-            <SourceCatalog sources={p.sources} onActivate={p.onActivateSource} onDeactivate={p.onRemoveSource} />
+            {mine.length === 0 && (
+              <p className="px-4 pt-3 text-[12px] leading-relaxed text-zinc-500">
+                The ready-made English, Hindi, Bangla, South, Korean and Anime servers are already built in. Add your own FTP / server link here if you have one.
+              </p>
+            )}
+            {mine.map((s) => (
+              <div key={s.id} className="flex items-center gap-3 border-b border-white/[0.04] px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13.5px] font-medium text-zinc-100">{s.name}</p>
+                  <p className="truncate text-[11px] text-zinc-500">{s.type === 'series' ? 'Series' : 'Movies'} · {s.url}</p>
+                </div>
+                <button
+                  aria-label={`Delete ${s.name}`}
+                  onClick={() => {
+                    if (window.confirm(`Delete “${s.name}”?`)) p.onRemoveSource(s.id);
+                  }}
+                  className="rounded-lg p-2 text-zinc-500 active:scale-90 active:text-rose-400"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
             <button onClick={() => setShowAdd((v) => !v)} className="flex w-full items-center gap-2 px-4 py-3 text-[13.5px] font-semibold text-amber-400 active:bg-white/[0.04]">
               <Plus className="h-4 w-4" /> Add a source
             </button>

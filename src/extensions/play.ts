@@ -78,7 +78,7 @@ export async function addonSubtitles(type: string, videoId: string): Promise<{ u
 export async function resolveEpisodeItem(cur: ParsedFtpItem, ep: PlayerEpisode): Promise<ParsedFtpItem> {
   if (!cur.extType || !ep.videoId) throw new Error('This episode has no stream source');
   const exts = getExtensions();
-  const [s, extra] = await Promise.all([pickBestStream(exts, cur.extType, ep.videoId), addonSubtitles(cur.extType, ep.videoId)]);
+  const [s, extra] = await Promise.all([pickBestStream(exts, cur.extType, ep.videoId), Promise.race([addonSubtitles(cur.extType, ep.videoId), new Promise<{ url: string; label: string }[]>((r) => setTimeout(() => r([]), 1500))])]);
   if (!s) throw new Error('No playable stream found for this episode. Open it from the title page to see all sources.');
   return buildExtItem({
     title: cur.cleanTitle || cur.rawName,

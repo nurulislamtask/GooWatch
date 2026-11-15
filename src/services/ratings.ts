@@ -4,7 +4,7 @@ import { getJson } from '../extensions/http';
 import { readPrefs } from '../mobile/prefs';
 
 const CINEMETA = 'https://v3-cinemeta.strem.io';
-const KEY = 'gw_ratings_v2';
+const KEY = 'gw_ratings_v3';
 const HIT_TTL = 14 * 24 * 3600 * 1000;
 const MISS_TTL = 2 * 24 * 3600 * 1000;
 
@@ -100,25 +100,35 @@ function schedule<T>(fn: () => Promise<T>): Promise<T> {
 async function imdbByTitle(t: RatingTarget): Promise<{ id?: string; imdb?: string; genres?: string[] }> {
   const q = norm(t.title);
   if (!q) return {};
-  const r = await getJson<{ metas?: any[] }>(`${CINEMETA}/catalog/${t.kind}/top/search=${encodeURIComponent(t.title)}.json`, 24 * 3600 * 1000, 10000);
-  const metas = (r.metas || []).filter((m) => m && m.id);
   const y = yearOf(t.year);
   const yr = (m: any) => yearOf(m.releaseInfo || m.year);
-  const exact = metas.filter((m) => norm(String(m.name || '')) === q);
-  const pick =
-    exact.find((m) => y && Math.abs(yr(m) - y) <= 1) ||
-    (!y ? exact[0] : undefined) ||
-    (exact.length === 1 ? exact[0] : undefined) ||
-    (metas.length === 1 && norm(String(metas[0].name)).startsWith(q) ? metas[0] : undefined);
-  if (!pick) return {};
-  let imdb = pick.imdbRating ? String(pick.imdbRating) : undefined;
-  let genres: string[] | undefined = Array.isArray(pick.genres) ? pick.genres.map(String) : undefined;
-  if (!imdb || !genres) {
-    const m = await imdbById(t.kind, String(pick.id));
-    imdb = imdb || m.imdb;
-    genres = genres || m.genres;
+  // the same name can be filed as a movie or a series (anime, specials): try the stated kind first, then the other one
+  for (const kind of [t.kind, t.kind === 'movie' ? 'series' : 'movie'] as const) {
+    let metas: any[] = [];
+    try {
+      const r = await getJson<{ metas?: any[] }>(`${CINEMETA}/catalog/${kind}/top/search=${encodeURIComponent(t.title)}.json`, 24 * 3600 * 1000, 10000);
+      metas = (r.metas || []).filter((m) => m && m.id);
+    } catch {
+      continue;
+    }
+    const near = (m: any) => !y || !yr(m) || Math.abs(yr(m) - y) <= 1;
+    const exact = metas.filter((m) => norm(String(m.name || '')) === q);
+    const loose = metas.filter((m) => {
+      const n = norm(String(m.name || ''));
+      return n && (n.startsWith(q) || q.startsWith(n)) && (!!y ? near(m) && !!yr(m) : metas.length === 1);
+    });
+    const pick = exact.find((m) => y && yr(m) && Math.abs(yr(m) - y) <= 1) || (!y ? exact[0] : undefined) || (exact.length === 1 ? exact[0] : undefined) || loose[0];
+    if (!pick) continue;
+    let imdb = pick.imdbRating ? String(pick.imdbRating) : undefined;
+    let genres: string[] | undefined = Array.isArray(pick.genres) ? pick.genres.map(String) : undefined;
+    if (!imdb || !genres) {
+      const m = await imdbById(kind, String(pick.id)).catch(() => ({} as { imdb?: string; genres?: string[] }));
+      imdb = imdb || m.imdb;
+      genres = genres || m.genres;
+    }
+    return { id: String(pick.id), imdb, genres };
   }
-  return { id: String(pick.id), imdb, genres };
+  return {};
 }
 
 async function imdbById(kind: string, id: string): Promise<{ imdb?: string; genres?: string[] }> {
@@ -127,11 +137,12 @@ async function imdbById(kind: string, id: string): Promise<{ imdb?: string; genr
   return { imdb: v ? String(v) : undefined, genres: Array.isArray(r.meta?.genres) ? r.meta.genres.map(String) : undefined };
 }
 
-async function rottenById(id: string, key: string): Promise<{ rt?: string; rated?: string }> {
+async function rottenById(id: string, key: string): Promise<{ rt?: string; rated?: string; imdb?: string }> {
   const r = await getJson<any>(`https://www.omdbapi.com/?i=${encodeURIComponent(id)}&apikey=${encodeURIComponent(key)}`, 24 * 3600 * 1000, 10000);
   const row = (r?.Ratings || []).find((x: any) => /rotten/i.test(String(x.Source)));
   const rated = r?.Rated && !/^n\/a$/i.test(String(r.Rated)) ? String(r.Rated) : undefined;
-  return { rt: row?.Value ? String(row.Value) : undefined, rated };
+  const imdb = r?.imdbRating && !/^n\/a$/i.test(String(r.imdbRating)) ? String(r.imdbRating) : undefined;
+  return { rt: row?.Value ? String(row.Value) : undefined, rated, imdb };
 }
 
 const LEVEL: Record<string, number> = { G: 1, 'TV-Y': 1, 'TV-Y7': 1, 'TV-G': 1, PG: 2, 'TV-PG': 2, 'PG-13': 3, 'TV-14': 3, R: 4, 'TV-MA': 4, 'NC-17': 5, X: 5 };
@@ -161,7 +172,7 @@ export function ensureRating(t: RatingTarget): Promise<Rating | undefined> {
   const omdb = (readPrefs().omdbKey || '').trim();
   const c = load();
   const have = c[k];
-  const fresh = have && Date.now() - have.t < (have.id || have.imdb ? HIT_TTL : MISS_TTL);
+  const fresh = have && Date.now() - have.t < (have.imdb ? HIT_TTL : MISS_TTL);
   const needRt = !!omdb && !!(have?.id || t.imdbId) && have?.rtFor !== omdb;
   if (fresh && !needRt) return Promise.resolve(have);
   if (!fresh && t.imdb && isImdb(t.imdbId)) {
@@ -172,7 +183,7 @@ export function ensureRating(t: RatingTarget): Promise<Rating | undefined> {
   const job = schedule(async () => {
     const cur: Rating = { ...(load()[k] || { t: 0 }) };
     try {
-      if (!(Date.now() - cur.t < HIT_TTL && (cur.imdb || cur.id))) {
+      if (!(Date.now() - cur.t < HIT_TTL && cur.imdb)) {
         if (isImdb(t.imdbId)) {
           cur.id = t.imdbId;
           const m = await imdbById(t.kind, t.imdbId!);
@@ -189,6 +200,7 @@ export function ensureRating(t: RatingTarget): Promise<Rating | undefined> {
         const o = await rottenById(cur.id, omdb).catch(() => ({} as { rt?: string; rated?: string }));
         cur.rt = o.rt;
         cur.rated = o.rated;
+        if (!cur.imdb && o.imdb) cur.imdb = o.imdb;
         cur.rtFor = omdb;
       }
       cur.t = Date.now();

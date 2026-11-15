@@ -83,7 +83,7 @@ export const ExtDetail: React.FC<{
           seq.current++; // nobody else may start now
           const best = latest.current.find((s) => s.playable && s.url) || first;
           void start(best, t);
-        }, 1800);
+        }, 900);
       }
       latest.current = all;
     });
@@ -128,7 +128,8 @@ export const ExtDetail: React.FC<{
     const isEp = tg.episode !== undefined;
     const year = parseInt(String(meta?.year || meta?.releaseInfo || preview.year || ''), 10) || undefined;
     setTarget(null);
-    const extra = await addonSubtitles(preview.type, tg.videoId);
+    // subtitles from add-ons must never hold the movie back: wait a moment at most
+    const extra = await Promise.race([addonSubtitles(preview.type, tg.videoId), new Promise<{ url: string; label: string }[]>((r) => setTimeout(() => r([]), 600))]).catch(() => []);
     onPlay(
       buildExtItem({
         title,

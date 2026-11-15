@@ -56,7 +56,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   const types = useMemo(() => [...new Set(cats.map((c) => c.cat.type))], [cats]);
 
   const [view, setView] = useState<'ext' | 'servers' | null>(null); // null = decide automatically
-  const showServers = !extOn || (hasServers && (view ? view === 'servers' : types.length === 0));
+  const showServers = !extOn || (hasServers && (view ? view === 'servers' : true));
 
   const [type, setType] = useState('');
   const activeType = type && types.includes(type) ? type : types[0] || '';
@@ -214,12 +214,12 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
       </div>
 
       {extOn && hasServers && (
-        <div className="mx-4 mt-3 flex rounded-xl bg-white/[0.07] p-1 md:mx-6">
-          <button className={`flex-1 rounded-lg py-2 text-[13px] font-semibold ${!showServers ? 'bg-amber-400 text-black' : 'text-zinc-300'}`} onClick={() => setView('ext')}>
-            Extensions
-          </button>
-          <button className={`flex-1 rounded-lg py-2 text-[13px] font-semibold ${showServers ? 'bg-amber-400 text-black' : 'text-zinc-300'}`} onClick={() => setView('servers')}>
+        <div className="mx-4 mt-3 inline-flex rounded-xl bg-white/[0.07] p-1 md:mx-6">
+          <button className={`rounded-lg px-5 py-2 text-[13px] font-semibold ${showServers ? 'bg-amber-400 text-black' : 'text-zinc-300'}`} onClick={() => setView('servers')}>
             My servers
+          </button>
+          <button className={`rounded-lg px-5 py-2 text-[13px] font-semibold ${!showServers ? 'bg-amber-400 text-black' : 'text-zinc-300'}`} onClick={() => setView('ext')}>
+            Extensions
           </button>
         </div>
       )}

@@ -21,6 +21,20 @@ const SORTS: { key: Sort; label: string; hint?: string }[] = [
 const target = (i: ParsedFtpItem) => ({ kind: (i.mediaKind === 'series' ? 'series' : 'movie') as 'movie' | 'series', title: displayTitle(i.cleanTitle || i.rawName), year: i.year, imdbId: i.imdbId });
 
 /** Movies / Series: filter by source (language / category), sort, and an endless grid. */
+export /** Server folder names are technical ("English Movies · 1080p"): show them as plain languages instead. */
+export function langOf(name?: string): string {
+  const n = (name || '').toLowerCase();
+  if (/bangla|bengali|kolkata/.test(n)) return 'Bangla';
+  if (/south|dubbed/.test(n)) return 'South Indian & Hindi dubbed';
+  if (/hindi|bollywood/.test(n)) return 'Hindi';
+  if (/korean/.test(n)) return 'Korean';
+  if (/anime|cartoon|animation/.test(n)) return 'Animation & Anime';
+  if (/foreign/.test(n)) return 'Other languages';
+  if (/english|hollywood/.test(n)) return 'English';
+  if (/tv|web|series/.test(n)) return 'TV & Web Series';
+  return name || '';
+}
+
 export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genre?: string; onGenre?: (g: string) => void }> = ({ api, kind, genre = '', onGenre }) => {
   const [source, setSource] = useState('all');
   const [filter, setFilter] = useState<FilterState>(NO_FILTER);
@@ -40,7 +54,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
   const all = useMemo(() => api.library.filter((i) => i.mediaKind === kind && allowLibraryItem(i, mode)), [api.library, kind, mode]);
   const sourceNames = useMemo(() => {
     const m = new Map<string, number>();
-    all.forEach((i) => m.set(i.sourceServerName || '', (m.get(i.sourceServerName || '') || 0) + 1));
+    all.forEach((i) => m.set(langOf(i.sourceServerName), (m.get(langOf(i.sourceServerName)) || 0) + 1));
     return [...m.entries()].filter(([n]) => n).sort((a, b) => b[1] - a[1]);
   }, [all]);
 
@@ -51,7 +65,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
     if (!needLookup) return;
     let alive = true;
     let n = 0;
-    const base = (source === 'all' ? all : all.filter((i) => i.sourceServerName === source)).slice(0, 400);
+    const base = (source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source)).slice(0, 400);
     base.forEach((i) =>
       ensureRating(target(i)).then(() => {
         if (alive && ++n % 10 === 0) setLookTick((x) => x + 1);
@@ -65,7 +79,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
   }, [needLookup, source, all]);
 
   const list = useMemo(() => {
-    let l = source === 'all' ? all : all.filter((i) => i.sourceServerName === source);
+    let l = source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source);
     if (genreLocal) {
       const g = genreLocal.toLowerCase();
       l = l.filter((i) => {
@@ -88,7 +102,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
   useEffect(() => {
     if (sort !== 'rating') return;
     let alive = true;
-    const base = (source === 'all' ? all : all.filter((i) => i.sourceServerName === source)).slice(0, 240);
+    const base = (source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source)).slice(0, 240);
     let n = 0;
     base.forEach((i) =>
       ensureRating(target(i)).then(() => {
@@ -130,8 +144,8 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
           </button>
         </div>
         <div className="mt-3 flex gap-2 overflow-x-auto px-4 md:px-6" style={{ scrollbarWidth: 'none' }}>
-          <PickerButton label="Categories" value={source === 'all' ? undefined : source} active={source !== 'all'} onClick={() => setSheet('cat')} />
-          <PickerButton label="Genre" value={genreLocal || undefined} active={!!genreLocal} onClick={() => setSheet('genre')} />
+          <PickerButton label="Categories" value={genreLocal || undefined} active={!!genreLocal} onClick={() => setSheet('genre')} />
+          <PickerButton label="Language" value={source === 'all' ? undefined : source} active={source !== 'all'} onClick={() => setSheet('cat')} />
           <PickerButton label="Filter" value={filterActive(filter) ? filterLabel(filter) : undefined} active={filterActive(filter)} onClick={() => setSheet('filter')} />
           <PickerButton label="Sort" value={SORTS.find((x) => x.key === sort)!.label} onClick={() => setSheet('sort')} />
           {source !== 'all' && (
@@ -157,7 +171,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
       {list.length === 0 && <p className="px-6 pt-16 text-center text-sm text-zinc-500">{needLookup ? 'Nothing matches yet — titles are still being checked, or try another filter.' : 'Nothing here yet.'}</p>}
       {sheet === 'cat' && (
         <PickerSheet
-          title="Categories"
+          title="Language"
           value={source}
           options={[{ key: 'all', label: 'All', hint: `${all.length.toLocaleString()} titles` }, ...sourceNames.map(([n, c]) => ({ key: n, label: n, hint: `${c.toLocaleString()} titles` }))]}
           onPick={setSource}
@@ -166,7 +180,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
       )}
       {sheet === 'genre' && (
         <PickerSheet
-          title="Genre"
+          title="Categories"
           value={genreLocal}
           options={[{ key: '', label: 'All' }, ...CATEGORIES.filter((c) => !c.type && (mode === 'all' || !['Horror', 'Crime', 'War'].includes(c.id))).map((c) => ({ key: c.id, label: c.label }))]}
           onPick={setGenre}

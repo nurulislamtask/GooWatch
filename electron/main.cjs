@@ -171,7 +171,7 @@ function setupAutoUpdate() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // The page shows a blocking "Updating GooWatch" screen (no way to skip it): the download starts by itself.
+  // The page shows an "Update available" card (Update now / Later); the download starts when the person presses Update now.
   let ustate = { state: 'none', version: '', percent: 0, message: '' };
   const push = () => {
     try {
@@ -192,11 +192,17 @@ function setupAutoUpdate() {
   });
   autoUpdater.on('update-available', (info) => {
     try {
-      new Notification({ title: 'GooWatch is updating', body: `Version ${info.version} is downloading.` }).show();
+      const n = new Notification({ title: 'GooWatch update available', body: `Version ${info.version} is ready to install. Open GooWatch and press Update now.` });
+      n.on('click', () => {
+        if (mainWindow) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.focus();
+        }
+      });
+      n.show();
     } catch {}
     ustate = { state: 'available', version: info.version, percent: 0, message: '' };
     push();
-    startDownload();
   });
   autoUpdater.on('download-progress', (p) => {
     const pc = Math.max(0, Math.min(100, p.percent || 0));

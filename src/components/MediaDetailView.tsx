@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { fmtTime, readGone, readResume } from '../mobile/resume';
 import {
   ArrowLeft,
   Play,
@@ -220,9 +221,38 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
   const backdropUrl = enrichedMeta?.backdropUrl || posterUrl;
   // Play pressed while the stream is still being scanned: remember it and start by itself as soon as it is ready
   const [autoPlay, setAutoPlay] = useState(false);
+  // what was watched: per episode "watched 12:30 of 45:00" or finished, and the episode to continue with
+  const [rTick, setRTick] = useState(0);
+  useEffect(() => {
+    const f = () => setRTick((x) => x + 1);
+    window.addEventListener('gw:resume-changed', f);
+    window.addEventListener('gw:sync-applied', f);
+    return () => {
+      window.removeEventListener('gw:resume-changed', f);
+      window.removeEventListener('gw:sync-applied', f);
+    };
+  }, []);
+  const resumeMap = useMemo(() => readResume(), [episodes, rTick]);
+  const goneMap = useMemo(() => readGone(), [episodes, rTick]);
+  const epState = (id: string) => {
+    const rp = resumeMap[id];
+    return { rp, done: !rp && (!!goneMap[id] || watchedEpisodeIds.has(id)) };
+  };
+  const nextEp = useMemo(() => {
+    if (!episodes.length) return null;
+    const partial = episodes.find((e) => resumeMap[e.id]);
+    if (partial) return { ep: partial, kind: 'continue' as const };
+    let lastDone = -1;
+    episodes.forEach((e, i) => {
+      if (!resumeMap[e.id] && (goneMap[e.id] || watchedEpisodeIds.has(e.id))) lastDone = i;
+    });
+    if (lastDone >= 0 && lastDone + 1 < episodes.length) return { ep: episodes[lastDone + 1], kind: 'next' as const };
+    return { ep: episodes[0], kind: 'first' as const };
+  }, [episodes, resumeMap, goneMap, watchedEpisodeIds]);
+  const doneCount = episodes.filter((e) => epState(e.id).done).length;
   const doPlay = () => {
     if (isSeries) {
-      onPlayItem(effectivePlayable, episodes.length > 0 ? episodes : [effectivePlayable], subtitles, seasons);
+      onPlayItem(nextEp && activeEpisodeId === episodes[0]?.id ? nextEp.ep : effectivePlayable, episodes.length > 0 ? episodes : [effectivePlayable], subtitles, seasons);
     } else {
       const playableItem = resolvedMovie || (movieFiles.length > 0 ? movieFiles[0] : item);
       onPlayItem(playableItem, movieFiles.length > 0 ? movieFiles : [playableItem], subtitles);
@@ -450,7 +480,13 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                   className="bg-[#E5A00D] hover:bg-[#F59E0B] text-black font-semibold text-xs sm:text-sm px-6 py-2.5 rounded-lg flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all hover:scale-[1.02] cursor-pointer"
                 >
                   <Play className="w-4 h-4 fill-black" />
-                  <span>{isSeries ? (episodes.length > 0 ? 'Play S01E01' : 'Play Series') : 'Play Movie'}</span>
+                  <span>
+                    {isSeries
+                      ? episodes.length > 0 && nextEp
+                        ? `${nextEp.kind === 'continue' ? 'Continue' : nextEp.kind === 'next' ? 'Next:' : 'Play'} S${String(nextEp.ep.season || 1).padStart(2, '0')}E${String(nextEp.ep.episode || episodes.indexOf(nextEp.ep) + 1).padStart(2, '0')}`
+                        : 'Play Series'
+                      : 'Play Movie'}
+                  </span>
                 </button>
               )}
 
@@ -632,7 +668,7 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
               </div>
 
               <div className="text-xs font-mono text-zinc-400">
-                {episodes.length > 0 ? `${episodes.length} episodes` : 'Scanning episodes...'}
+                {episodes.length > 0 ? `${doneCount > 0 ? `${doneCount} of ${episodes.length} watched · ` : ''}${episodes.length} episodes` : 'Scanning episodes...'}
               </div>
             </div>
 
@@ -658,8 +694,10 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                     const epNum = ep.episode || idx + 1;
                     const sNum = ep.season || 1;
                     const epTag = `S${String(sNum).padStart(2, '0')}E${String(epNum).padStart(2, '0')}`;
-                    const isUpNext = idx === 0;
-                    const isWatched = watchedEpisodeIds.has(ep.id);
+                    const st = epState(ep.id);
+                    const isUpNext = nextEp ? nextEp.ep.id === ep.id : idx === 0;
+                    const isWatched = st.done;
+                    const pctSeen = st.rp ? (st.rp.d > 0 ? Math.min(100, Math.max(3, (st.rp.t / st.rp.d) * 100)) : 5) : 0;
                     const isActive = activeEpisodeId === ep.id;
 
                     return (
@@ -688,6 +726,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 opacity-80"
                             />
                           )}
+                          {pctSeen > 0 && (
+                            <div className="absolute inset-x-0 bottom-0 z-10 h-1 bg-white/25">
+                              <div className="h-full bg-amber-400" style={{ width: `${pctSeen}%` }} />
+                            </div>
+                          )}
                           <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                             <div className="w-8 h-8 rounded-full bg-[#E5A00D] text-black flex items-center justify-center shadow-lg">
                               <Play className="w-3.5 h-3.5 fill-black translate-x-0.5" />
@@ -714,6 +757,11 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                               : ep.cleanTitle || ep.rawName}
                           </h4>
 
+                          {(st.rp || isWatched) && (
+                            <p className="text-[11px] font-bold text-amber-300">
+                              {isWatched ? '✓ Watched' : `Watched ${fmtTime(st.rp!.t)}${st.rp!.d > 0 ? ` of ${fmtTime(st.rp!.d)}` : ''}`}
+                            </p>
+                          )}
                           <div className="text-[11px] font-mono text-zinc-500 flex items-center gap-2">
                             <span>{ep.quality || '1080p'}</span>
                             <span>·</span>

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { IS_CAPACITOR } from '../utils/platform';
 import { NativePlayer } from '../mobile/nativePlayer';
-import { registerBack } from '../mobile/backStack';
 
 const REPO = 'nurulislamtask/GooWatch';
 
@@ -34,56 +33,66 @@ export async function fetchLatestRelease(): Promise<{ version: string; apk: stri
 
 type DesktopState = { state: 'none' | 'available' | 'downloading' | 'ready' | 'error'; version: string; percent: number; message: string };
 
-/** Full-screen, un-skippable screen: while a newer version exists nobody can use the app. */
-const Blocker: React.FC<{ version: string; current: string; children: React.ReactNode }> = ({ version, current, children }) => (
-  <div className="fixed inset-0 z-[900] flex items-center justify-center bg-[#07080C] p-6 text-center" onContextMenu={(e) => e.preventDefault()}>
-    <div className="w-full max-w-sm">
-      <img src="/icon.png" alt="" className="mx-auto mb-5 h-20 w-20 rounded-3xl" onError={(e) => (e.currentTarget.style.display = 'none')} />
-      <h2 className="text-[22px] font-extrabold text-white">Update required</h2>
-      <p className="mt-2 text-[13.5px] leading-relaxed text-zinc-400">
-        GooWatch <b className="text-amber-400">{version}</b> is out{current ? ` (you have ${current})` : ''}. You need to update before you can keep watching.
-      </p>
-      <div className="mt-6">{children}</div>
+/** Small card in the corner: tells that a new version exists. Nothing is forced — "Later" hides it until the next start. */
+const Card: React.FC<{ title: string; text: string; children?: React.ReactNode; onLater?: () => void }> = ({ title, text, children, onLater }) => (
+  <div className="fixed bottom-24 right-4 z-[900] w-[min(92vw,360px)] rounded-2xl bg-[#14171F] p-4 shadow-2xl ring-1 ring-amber-400/30 md:bottom-6">
+    <div className="flex items-start gap-3">
+      <img src="/icon.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" onError={(e) => (e.currentTarget.style.display = 'none')} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[14.5px] font-extrabold text-white">{title}</p>
+        <p className="mt-0.5 text-[12.5px] leading-snug text-zinc-400">{text}</p>
+      </div>
     </div>
+    {children && <div className="mt-3">{children}</div>}
+    {onLater && (
+      <button onClick={onLater} className="mt-2 w-full rounded-xl py-2 text-[12.5px] font-semibold text-zinc-400 active:scale-[0.98]">
+        Later
+      </button>
+    )}
   </div>
 );
 
-/** Desktop app: the main process downloads the update by itself; this screen shows the progress. */
+/** Desktop app: shows the update card; the download starts only when the person presses Update now. */
 const DesktopUpdate: React.FC = () => {
   const [s, setS] = useState<DesktopState | null>(null);
+  const [hidden, setHidden] = useState('');
   useEffect(() => {
     const d = (window as any).gwDesktop;
     if (!d || !d.onUpdate) return;
     return d.onUpdate((st: DesktopState) => setS(st));
   }, []);
-  if (!s || s.state === 'none') return null;
+  if (!s || s.state === 'none' || hidden === s.version) return null;
+  const go = () => (window as any).gwDesktop?.retryUpdate?.();
+  if (s.state === 'available')
+    return (
+      <Card title={`GooWatch ${s.version} is available`} text="A new version is ready. It installs in a minute and GooWatch restarts by itself." onLater={() => setHidden(s.version)}>
+        <button onClick={go} className="w-full rounded-xl bg-amber-400 py-2.5 text-[14px] font-extrabold text-black active:scale-[0.98]">
+          Update now
+        </button>
+      </Card>
+    );
+  if (s.state === 'error')
+    return (
+      <Card title="Update did not finish" text={s.message || 'The download failed.'} onLater={() => setHidden(s.version)}>
+        <button onClick={go} className="w-full rounded-xl bg-amber-400 py-2.5 text-[14px] font-extrabold text-black active:scale-[0.98]">
+          Try again
+        </button>
+      </Card>
+    );
   return (
-    <Blocker version={s.version} current={__APP_VERSION__ !== '0.0.0' ? __APP_VERSION__ : ''}>
-      {s.state === 'error' ? (
-        <>
-          <p className="mb-3 break-words text-[12.5px] text-rose-300">{s.message || 'The download failed.'}</p>
-          <button onClick={() => (window as any).gwDesktop?.retryUpdate?.()} className="w-full rounded-2xl bg-amber-400 py-3.5 text-[15px] font-extrabold text-black active:scale-[0.98]">
-            Try again
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="h-2.5 overflow-hidden rounded-full bg-white/10">
-            <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${s.state === 'ready' ? 100 : Math.max(4, s.percent)}%` }} />
-          </div>
-          <p className="mt-3 text-[13px] text-zinc-300">
-            {s.state === 'ready' ? 'Installing… GooWatch will restart by itself.' : s.state === 'available' ? 'Starting download…' : `Downloading… ${Math.round(s.percent)}%`}
-          </p>
-        </>
-      )}
-    </Blocker>
+    <Card title={s.state === 'ready' ? 'Installing…' : `Downloading ${s.version}`} text={s.state === 'ready' ? 'GooWatch will restart by itself.' : `${Math.round(s.percent)}% — you can keep watching.`}>
+      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-amber-400 transition-all" style={{ width: `${s.state === 'ready' ? 100 : Math.max(4, s.percent)}%` }} />
+      </div>
+    </Card>
   );
 };
 
-/** Phone app: checks GitHub for a newer release; the update cannot be skipped. */
+/** Phone app: checks GitHub for a newer release and shows the update card (Update now / Later). */
 const PhoneUpdate: React.FC = () => {
   const [update, setUpdate] = useState<{ version: string; apk: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [hidden, setHidden] = useState('');
 
   useEffect(() => {
     if (!__APP_VERSION__ || __APP_VERSION__ === '0.0.0') return;
@@ -94,26 +103,21 @@ const PhoneUpdate: React.FC = () => {
       if (isNewer(rel.version, __APP_VERSION__)) setUpdate(rel);
     };
     const first = window.setTimeout(check, 1500);
-    const every = window.setInterval(check, 20 * 60 * 1000);
-    const vis = () => { if (document.visibilityState === 'visible') check(); };
-    document.addEventListener('visibilitychange', vis);
+    const every = window.setInterval(check, 60 * 60 * 1000);
     return () => {
       alive = false;
       window.clearTimeout(first);
       window.clearInterval(every);
-      document.removeEventListener('visibilitychange', vis);
     };
   }, []);
 
-  // the phone's Back button must not get around the update screen
-  useEffect(() => {
-    if (!update) return;
-    return registerBack(() => true);
-  }, [update]);
-
-  if (!update) return null;
+  if (!update || hidden === update.version) return null;
   return (
-    <Blocker version={update.version} current={__APP_VERSION__}>
+    <Card
+      title={`GooWatch ${update.version} is available`}
+      text={busy ? 'Downloading… the installer opens when it is done. If Android asks, allow “Install unknown apps” for GooWatch.' : `You have ${__APP_VERSION__}. Update takes about a minute.`}
+      onLater={busy ? undefined : () => setHidden(update.version)}
+    >
       <button
         disabled={busy}
         onClick={async () => {
@@ -123,14 +127,13 @@ const PhoneUpdate: React.FC = () => {
           } catch {
             /* ignore */
           }
-          window.setTimeout(() => setBusy(false), 20000); // allow another try if the installer did not open
+          window.setTimeout(() => setBusy(false), 20000);
         }}
-        className="w-full rounded-2xl bg-amber-400 py-3.5 text-[15px] font-extrabold text-black active:scale-[0.98] disabled:opacity-60"
+        className="w-full rounded-xl bg-amber-400 py-2.5 text-[14px] font-extrabold text-black active:scale-[0.98] disabled:opacity-60"
       >
-        {busy ? 'Downloading… the installer opens when it is done' : 'Update now'}
+        {busy ? 'Downloading…' : 'Update now'}
       </button>
-      {busy && <p className="mt-3 text-[12px] text-zinc-500">Progress is in the notification bar. If Android asks, allow “Install unknown apps” for GooWatch, then press Install.</p>}
-    </Blocker>
+    </Card>
   );
 };
 

@@ -172,7 +172,7 @@ export async function fetchStreams(
 
   const jobs: Promise<void>[] = stremio.map(async (e) => {
     try {
-      const r = await getJson<{ streams?: ExtStream[] }>(extUrl(e, `/stream/${type}/${encodeURIComponent(videoId)}.json`), 2 * 60 * 1000, 20000);
+      const r = await getJson<{ streams?: ExtStream[] }>(extUrl(e, `/stream/${type}/${encodeURIComponent(videoId)}.json`), 2 * 60 * 1000, 12000);
       (r.streams || []).forEach((s, i) => all.push(resolve(e, s, i)));
     } catch {
       /* this extension did not answer */
@@ -261,14 +261,14 @@ export function pickBestStream(exts: InstalledExt[], type: string, videoId: stri
         best = p;
         if (!firstAt) firstAt = Date.now();
       }
-      if (pending === 0 || (best && Date.now() - firstAt > 4000)) finish();
+      if (pending === 0 || (best && Date.now() - firstAt > 1500)) finish();
     })
       .then(() => finish())
       .catch(() => finish());
     // if answers trickle in slowly, stop shortly after the first playable stream
     const poll = setInterval(() => {
       if (done) return clearInterval(poll);
-      if (best && Date.now() - firstAt > 4000) {
+      if (best && Date.now() - firstAt > 1500) {
         clearInterval(poll);
         finish();
       }
