@@ -13,7 +13,7 @@ export interface GuideEpisode {
   airdate?: string;
 }
 type Guide = Record<string, GuideEpisode>; // "S1E3"
-const LS = 'cineftp_guide_v2';
+const LS = 'cineftp_guide_v3';
 const mem = new Map<string, Guide | null>();
 const pending = new Map<string, Promise<Guide | null>>();
 
@@ -47,7 +47,7 @@ export function peekGuide(series: string): Guide | null {
   return g;
 }
 
-export function loadGuide(series: string): Promise<Guide | null> {
+export function loadGuide(series: string, imdbId?: string): Promise<Guide | null> {
   if (!series.trim()) return Promise.resolve(null);
   const k = keyOf(series);
   const have = peekGuide(series);
@@ -55,11 +55,29 @@ export function loadGuide(series: string): Promise<Guide | null> {
   if (pending.has(k)) return pending.get(k)!;
   const p = (async () => {
     try {
-      const r = await fetch(
-        `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(normalizeLookupTitle(series).title)}&embed=episodes`
-      );
-      if (!r.ok) return null;
-      const j = await r.json();
+      let j: any = null;
+      if (imdbId && /^tt\d+/.test(imdbId)) {
+        // exact match by IMDb id (a title search can pick another show with a similar name)
+        try {
+          const l = await fetch(`https://api.tvmaze.com/lookup/shows?imdb=${imdbId.match(/^tt\d+/)![0]}`);
+          if (l.ok) {
+            const sh = await l.json();
+            if (sh?.id) {
+              const r2 = await fetch(`https://api.tvmaze.com/shows/${sh.id}?embed=episodes`);
+              if (r2.ok) j = await r2.json();
+            }
+          }
+        } catch {
+          /* fall back to the title search */
+        }
+      }
+      if (!j) {
+        const r = await fetch(
+          `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(normalizeLookupTitle(series).title)}&embed=episodes`
+        );
+        if (!r.ok) return null;
+        j = await r.json();
+      }
       const eps: any[] = j?._embedded?.episodes || [];
       const g: Guide = {};
       for (const e of eps) {
@@ -100,15 +118,15 @@ export function playerEpisodeTitle(series: string, season: number | undefined, e
   return `${normalizeLookupTitle(series).title} · ${tag}${nm ? ' · ' + nm : ''}`;
 }
 
-export function useGuide(series: string): Guide | null {
+export function useGuide(series: string, imdbId?: string): Guide | null {
   const [g, setG] = useState<Guide | null>(() => peekGuide(series));
   useEffect(() => {
     let alive = true;
-    loadGuide(series).then((x) => alive && x && setG(x));
+    loadGuide(series, imdbId).then((x) => alive && x && setG(x));
     return () => {
       alive = false;
     };
-  }, [series]);
+  }, [series, imdbId]);
   return g;
 }
 

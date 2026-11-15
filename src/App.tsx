@@ -58,16 +58,15 @@ export default function App() {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed)) {
-          // one time: switch on the ready-made servers and drop the 3D / documentary / wrestling ones
-          if (!localStorage.getItem('gw_defaults_v2')) {
-            localStorage.setItem('gw_defaults_v2', '1');
-            const keep = (parsed as AppSource[]).filter((x) => !REMOVED_DEFAULTS.has(x.id));
-            const have = new Set(keep.map((x) => x.id));
-            const merged = [...keep, ...INITIAL_SOURCES.filter((x) => !have.has(x.id))];
-            localStorage.setItem('goowatch_sources_v1', JSON.stringify(merged));
-            return merged;
-          }
-          return parsed;
+          // the ready-made servers are always present (fresh addresses); only servers the person added are kept from the saved list
+          const catIds = new Set(INITIAL_SOURCES.map((x) => x.id));
+          const catUrls = new Set(INITIAL_SOURCES.map((x) => x.url));
+          const oldCount = new Map((parsed as AppSource[]).map((x) => [x.id, x.count] as const));
+          const mine = (parsed as AppSource[]).filter((x) => x && x.url && !catIds.has(x.id) && !catUrls.has(x.url) && !REMOVED_DEFAULTS.has(x.id) && !/^src-lan-/.test(x.id));
+          const merged = [...INITIAL_SOURCES.map((x) => ({ ...x, count: oldCount.get(x.id) || 0 })), ...mine];
+          localStorage.setItem('gw_defaults_v2', '1');
+          localStorage.setItem('goowatch_sources_v1', JSON.stringify(merged));
+          return merged;
         }
       }
     } catch {}

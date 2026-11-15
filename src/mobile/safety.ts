@@ -39,7 +39,7 @@ export function allowLibraryItem(item: ParsedFtpItem, mode: ContentMode = curren
   if (genres.some((g) => SCARY_GENRES.includes(g))) return false;
   if (genres.some((g) => KIDS_GENRES.map((k) => k.toLowerCase()).includes(g))) return true;
   if (genres.some((g) => GROWNUP_GENRES.includes(g))) return false;
-  if (KIDS_NAME.test(text) || /\b(kids?|cartoons?|children)\b/i.test(item.sourceServerName || '')) return true;
+  if (KIDS_NAME.test(text) ) return true;
   return false;
 }
 

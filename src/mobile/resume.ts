@@ -54,7 +54,7 @@ export function saveResumePoint(id: string, t: number, d: number, finishGap = 45
     if (d > 0 && t > d - finishGap) {
       delete all[id];
       gone[id] = now;
-    } else if (t > 10) {
+    } else if (t > 5) {
       all[id] = { t, d, u: now, by: deviceLabel() };
       delete gone[id];
     } else {
@@ -64,6 +64,7 @@ export function saveResumePoint(id: string, t: number, d: number, finishGap = 45
     if (keys.length > 600) keys.sort((a, b) => (all[a].u || 0) - (all[b].u || 0)).slice(0, keys.length - 600).forEach((k) => delete all[k]);
     writeResumeAndGone(all, gone);
     window.dispatchEvent(new Event(flush ? 'gw:sync-now' : 'gw:sync-soon'));
+    window.dispatchEvent(new Event('gw:resume-changed'));
   } catch {
     /* ignore */
   }
@@ -83,6 +84,7 @@ export function clearResume(id?: string) {
       writeResumeAndGone(all, gone);
     }
     window.dispatchEvent(new Event('gw:sync-soon'));
+    window.dispatchEvent(new Event('gw:resume-changed'));
   } catch {
     /* ignore */
   }

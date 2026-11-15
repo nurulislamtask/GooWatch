@@ -98,13 +98,36 @@ export const ExtDetail: React.FC<{
     setHintOff(true);
   };
   const mode = useContentMode();
-  const guide = useGuide(meta?.name || preview.name);
-  const resumeMap = useMemo(() => readResume(), [meta, target]);
-  const goneMap = useMemo(() => readGone(), [meta, target]);
+  const guide = useGuide(meta?.name || preview.name, String(preview.id).match(/^tt\d{6,}/)?.[0]);
+  const [rTick, setRTick] = useState(0);
+  useEffect(() => {
+    const f = () => setRTick((x) => x + 1);
+    window.addEventListener('gw:resume-changed', f);
+    window.addEventListener('gw:sync-applied', f);
+    return () => {
+      window.removeEventListener('gw:resume-changed', f);
+      window.removeEventListener('gw:sync-applied', f);
+    };
+  }, []);
+  const resumeMap = useMemo(() => readResume(), [meta, target, rTick]);
+  const goneMap = useMemo(() => readGone(), [meta, target, rTick]);
+  // where to carry on: an episode that was started, else the one after the last finished, else the first
+  const nextUp = useMemo(() => {
+    if (!episodic) return null;
+    const list = [...videos].sort((a, b) => (a.season ?? 1) - (b.season ?? 1) || (a.episode ?? a.number ?? 0) - (b.episode ?? b.number ?? 0));
+    const part = list.find((v) => resumeMap[`ext:${v.id}`]);
+    if (part) return { v: part, kind: 'continue' as const };
+    let last = -1;
+    list.forEach((v, i) => {
+      if (goneMap[`ext:${v.id}`]) last = i;
+    });
+    if (last >= 0 && list[last + 1]) return { v: list[last + 1], kind: 'next' as const };
+    return null;
+  }, [videos, resumeMap, goneMap, episodic]);
 
   const playMain = () => {
     if (episodic) {
-      const first = eps[0] || videos[0];
+      const first = nextUp?.v || eps[0] || videos[0];
       if (first) pickStreams({ videoId: first.id, season: first.season ?? 1, episode: first.episode ?? first.number, epTitle: first.title || first.name });
     } else pickStreams({ videoId: preview.id });
   };
@@ -183,7 +206,11 @@ export const ExtDetail: React.FC<{
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-[15px] font-bold text-black active:scale-[0.98] disabled:opacity-60 md:max-w-sm"
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-black" />}
-          {episodic ? 'Play first episode' : 'Play'}
+          {episodic
+            ? nextUp
+              ? `${nextUp.kind === 'continue' ? 'Continue' : 'Next:'} S${String(nextUp.v.season ?? 1).padStart(2, '0')}E${String(nextUp.v.episode ?? nextUp.v.number ?? 0).padStart(2, '0')}`
+              : 'Play first episode'
+            : 'Play'}
         </button>
         <button
           onClick={() => toggleExtSaved({ ...preview, poster: meta?.poster || preview.poster, background: meta?.background || preview.background, name: meta?.name || preview.name })}

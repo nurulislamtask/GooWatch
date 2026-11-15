@@ -77,7 +77,12 @@ export function useLibrary(sources: AppSource[]) {
       list.map(async (src) => {
         const seen = new Set<string>();
         try {
-          await browseDirectoryWithDeepScan(
+          // a server that never answers must not keep the whole refresh (and the Refresh button) waiting for ever
+          let stop: number | undefined;
+          const limit = new Promise<never>((_, rej) => {
+            stop = window.setTimeout(() => rej(new Error('timeout')), 180000);
+          });
+          await Promise.race([browseDirectoryWithDeepScan(
             src.url,
             (count, name) => alive() && setProgress(`${src.name} · ${name} (${count})`),
             (chunk) => {
@@ -97,7 +102,8 @@ export function useLibrary(sources: AppSource[]) {
               if (added) schedule();
             },
             force
-          );
+          ), limit]);
+          window.clearTimeout(stop);
           status.set(src.id, 'ok');
         } catch {
           status.set(src.id, 'fail'); // one server being offline must not stop the others, nor erase its titles

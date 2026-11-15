@@ -25,6 +25,7 @@ import { useInstallLinks } from '../../extensions/deepLink';
 import { ShellApi, Tab } from './types';
 import { AskHost } from './AskDialog';
 import { TorrentioSetupHost } from './TorrentioSetup';
+import { WelcomeLogin } from './WelcomeLogin';
 
 export interface MobileShellProps {
   sources: AppSource[];
@@ -189,6 +190,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
 
       <AskHost />
       <TorrentioSetupHost />
+      <WelcomeLogin />
       {!props.playerOpen && <BottomNav tab={tab} onChange={changeTab} />}
     </div>
   );

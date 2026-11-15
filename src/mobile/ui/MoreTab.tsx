@@ -310,8 +310,7 @@ export const MoreTab: React.FC<Props> = (p) => {
           title="Refresh library now"
           hint={p.scanning ? `Updating… ${p.progress}` : `Last updated ${ago(p.updatedAt)}. It also refreshes by itself every 6 hours.`}
           onClick={() => {
-            if (p.scanning) return flash('Already updating…');
-            flash('Refreshing all servers…');
+            flash(p.scanning ? 'Restarting the refresh…' : 'Refreshing all servers…');
             p.onRefresh();
           }}
         />
