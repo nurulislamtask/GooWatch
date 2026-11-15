@@ -1,4 +1,5 @@
 import { useContentMode } from '../safety';
+import { openTorrentioSetup } from './TorrentioSetup';
 import { useGuide } from '../episodeGuide';
 import { fmtTime, readGone, readResume } from '../resume';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -334,10 +335,10 @@ export const ExtDetail: React.FC<{
                           Check your settings once more.
                         </p>
                         <button
-                          onClick={() => window.open(`${mine.base}/configure`, '_blank')}
+                          onClick={() => openTorrentioSetup()}
                           className="mt-3 rounded-xl bg-white/10 px-4 py-2.5 text-[13px] font-extrabold text-white active:scale-95"
                         >
-                          Open my Torrentio settings
+                          Change my debrid key
                         </button>
                         <button onClick={dismissHint} className="ml-2 mt-3 rounded-xl px-3 py-2.5 text-[12px] font-semibold text-zinc-400 active:scale-95">
                           Don’t show again
@@ -353,16 +354,12 @@ export const ExtDetail: React.FC<{
                       <p className="mt-1 text-[12px] leading-relaxed text-zinc-300">
                         Torrent links need a <b>debrid account</b> (Real-Debrid, AllDebrid, Premiumize…). It turns the torrent into a normal link GooWatch can play.
                       </p>
-                      <ol className="mt-2 list-decimal space-y-1 pl-5 text-[12px] text-zinc-300">
-                        <li>Open the Torrentio setup page and choose your debrid service + key.</li>
-                        <li>Press its <b>Install</b> button — GooWatch opens and asks to confirm (or copy the link and paste it in Extensions).</li>
-                        <li>Come back here: the streams become playable.</li>
-                      </ol>
+                      <p className="mt-2 text-[12px] text-zinc-300">Press the button, choose your debrid service, paste its key — GooWatch tests it and sets Torrentio up for you.</p>
                       <button
-                        onClick={() => window.open('https://torrentio.strem.fun/configure', '_blank')}
+                        onClick={() => openTorrentioSetup()}
                         className="mt-3 rounded-xl bg-amber-400 px-4 py-2.5 text-[13px] font-extrabold text-black active:scale-95"
                       >
-                        Set up debrid (Torrentio)
+                        Set up debrid key
                       </button>
                       <button onClick={dismissHint} className="ml-2 mt-3 rounded-xl px-3 py-2.5 text-[12px] font-semibold text-zinc-400 active:scale-95">
                         Don’t show again

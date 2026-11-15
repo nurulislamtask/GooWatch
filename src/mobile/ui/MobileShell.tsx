@@ -24,6 +24,7 @@ import { NativePlayer } from '../nativePlayer';
 import { useInstallLinks } from '../../extensions/deepLink';
 import { ShellApi, Tab } from './types';
 import { AskHost } from './AskDialog';
+import { TorrentioSetupHost } from './TorrentioSetup';
 
 export interface MobileShellProps {
   sources: AppSource[];
@@ -186,6 +187,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
       )}
 
       <AskHost />
+      <TorrentioSetupHost />
       {!props.playerOpen && <BottomNav tab={tab} onChange={changeTab} />}
     </div>
   );

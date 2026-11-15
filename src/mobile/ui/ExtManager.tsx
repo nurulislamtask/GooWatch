@@ -1,3 +1,4 @@
+import { openTorrentioSetup } from './TorrentioSetup';
 import { hasConfig } from '../../extensions/store';
 import React, { useState } from 'react';
 import { ArrowLeft, Loader2, Plus, Puzzle, Trash2 } from 'lucide-react';
@@ -93,7 +94,7 @@ export const ExtManager: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 </p>
                 {e.manifest.behaviorHints?.configurable && (
                   <button
-                    onClick={() => window.open(`${e.base}/configure`, '_blank')}
+                    onClick={() => (/torrentio\.strem\.fun/i.test(e.base) ? openTorrentioSetup() : window.open(`${e.base}/configure`, '_blank'))}
                     className="mb-0.5 mt-0.5 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-zinc-200 active:scale-95"
                   >
                     {hasConfig(e) ? '✓ Set up · change' : e.manifest.behaviorHints?.configurationRequired ? '⚠ Set up (needed)' : 'Configure'}
