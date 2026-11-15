@@ -9,6 +9,7 @@ export interface MobilePrefs {
   softwareDecoder: boolean;
   autoSubtitles: boolean;
   subtitleLang: string; // opensubtitles code: eng, ben, hin ...
+  hiddenIndustries: string[]; // film industries the person switched off (Bollywood, Anime, Dhallywood …)
   homeHidden: string[]; // source ids that are not shown on Home
   extensionsOn: boolean; // use add-ons (Stremio / Nuvio) for Discover, Home rows and search
   contentMode: 'all' | 'family' | 'kids';
@@ -24,6 +25,7 @@ const DEFAULTS: MobilePrefs = {
   softwareDecoder: false,
   autoSubtitles: true,
   subtitleLang: 'eng',
+  hiddenIndustries: [],
   homeHidden: [],
   extensionsOn: true,
   contentMode: 'all',

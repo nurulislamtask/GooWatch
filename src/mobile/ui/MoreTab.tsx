@@ -20,6 +20,7 @@ import { clearCatalog } from '../catalogCache';
 import { clearResume } from '../resume';
 import { ExtManager } from './ExtManager';
 import { SOURCE_CATALOG } from '../../utils/sourceCatalog';
+import { INDUSTRY_ORDER } from '../../utils/industry';
 import { fetchLatestRelease, isNewer } from '../../components/AppUpdatePrompt';
 import { NativePlayer } from '../nativePlayer';
 import { AboutPanel } from '../../components/AboutPanel';
@@ -314,6 +315,20 @@ export const MoreTab: React.FC<Props> = (p) => {
             p.onRefresh();
           }}
         />
+      </Section>
+
+      <Section title="What I want to see">
+        <p className="px-4 pt-3 text-[12px] leading-relaxed text-zinc-500">Switch off the kinds of titles you never watch. They disappear from Home, Discover, Library and search.</p>
+        {INDUSTRY_ORDER.map((n) => {
+          const off = (p.prefs.hiddenIndustries || []).includes(n);
+          return (
+            <Line
+              key={n}
+              title={n}
+              right={<Toggle on={!off} onChange={(v) => p.setPrefs({ hiddenIndustries: v ? (p.prefs.hiddenIndustries || []).filter((x) => x !== n) : [...(p.prefs.hiddenIndustries || []), n] })} />}
+            />
+          );
+        })}
       </Section>
 
       <Section title="Home page">

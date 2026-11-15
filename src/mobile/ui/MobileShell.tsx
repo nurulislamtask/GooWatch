@@ -26,6 +26,7 @@ import { ShellApi, Tab } from './types';
 import { AskHost } from './AskDialog';
 import { TorrentioSetupHost } from './TorrentioSetup';
 import { WelcomeLogin } from './WelcomeLogin';
+import { industryOf } from '../../utils/industry';
 
 export interface MobileShellProps {
   sources: AppSource[];
@@ -68,6 +69,9 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
   }, []);
   const [prefs, setPrefs] = usePrefs();
   const lib = useLibrary(props.sources);
+  const hiddenInd = prefs.hiddenIndustries || [];
+  // industries the person switched off in Settings never show up anywhere
+  const visibleItems = useMemo(() => (hiddenInd.length ? lib.items.filter((i) => !hiddenInd.includes(industryOf(i))) : lib.items), [lib.items, hiddenInd.join('|')]);
   useEffect(() => {
     if (IS_CAPACITOR) NativePlayer.setImmersive({ on: prefs.fullscreen }).catch(() => {});
   }, [prefs.fullscreen]);
@@ -103,7 +107,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
 
   const api: ShellApi = useMemo(
     () => ({
-      library: lib.items,
+      library: visibleItems,
       sources: props.sources,
       watchlist: props.watchlist,
       recent: props.recentlyPlayed,
@@ -116,7 +120,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
       openExt: setExt,
       resumeTick,
     }),
-    [lib.items, props.sources, props.watchlist, props.recentlyPlayed, props.watchlistSet, resumeTick]
+    [visibleItems, props.sources, props.watchlist, props.recentlyPlayed, props.watchlistSet, resumeTick]
   );
 
   const changeTab = useCallback((t: Tab) => {
@@ -176,7 +180,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
           preview={ext}
           onClose={() => setExt(null)}
           onPlay={(it) => props.onPlayDirect(it)}
-          library={lib.items}
+          library={visibleItems}
           onOpenLibrary={(i) => api.openDetails(i)}
         />
       )}
