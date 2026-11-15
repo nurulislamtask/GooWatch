@@ -50,7 +50,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
   const allExts = useExtensions();
   const exts = useMemo(() => allExts.filter((e) => allowExt(e, mode)), [allExts, mode]);
   const hasServers = api.sources.length > 0;
-  const [serverKind, setServerKind] = useState<'movie' | 'series'>('movie');
+  const [serverKind, setServerKind] = useState<'movie' | 'series' | 'anime' | 'animation'>('movie');
 
   const cats = useMemo(() => exts.filter((e) => e.enabled).flatMap((e) => homeCatalogs(e).map((c) => ({ ext: e, cat: c }))), [exts]);
   const types = useMemo(() => [...new Set(cats.map((c) => c.cat.type))], [cats]);
@@ -161,6 +161,20 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
 
   // ---- a category picked in the PC sidebar / category list ----
   const applyCategory = (c: Category) => {
+    if (showServers) {
+      // the left Categories list also works for My servers
+      if (c.type === 'anime' || /^anime$/i.test(c.id)) {
+        setServerKind('anime');
+        setServerGenre('');
+      } else if (/^animation$/i.test(c.id)) {
+        setServerKind('animation');
+        setServerGenre('');
+      } else {
+        if (serverKind === 'anime' || serverKind === 'animation') setServerKind('movie');
+        setServerGenre(c.id);
+      }
+      return;
+    }
     if (!extOn || (types.length === 0 && hasServers)) {
       setView('servers');
       setServerGenre(c.type ? '' : c.id);
@@ -188,7 +202,7 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
     return () => window.removeEventListener(CATEGORY_EVENT, take);
   });
 
-  const activeCatId = showServers ? serverGenre : activeType === 'anime' && !genre ? 'Anime' : genre;
+  const activeCatId = showServers ? (serverKind === 'anime' ? 'Anime' : serverKind === 'animation' ? 'Animation' : serverGenre) : activeType === 'anime' && !genre ? 'Anime' : genre;
   useEffect(() => {
     setActiveCategory(activeCatId || '');
     return () => setActiveCategory('');
@@ -230,8 +244,10 @@ export const DiscoverTab: React.FC<{ api: ShellApi }> = ({ api }) => {
             <div className="flex gap-2 px-4 pt-3 md:px-6">
               <button className={chip(serverKind === 'movie')} onClick={() => setServerKind('movie')}>Movies</button>
               <button className={chip(serverKind === 'series')} onClick={() => setServerKind('series')}>Series</button>
+              <button className={chip(serverKind === 'anime')} onClick={() => setServerKind('anime')}>Anime</button>
+              <button className={chip(serverKind === 'animation')} onClick={() => setServerKind('animation')}>Animation</button>
             </div>
-            <BrowseTab api={api} kind={serverKind} genre={serverGenre} onGenre={setServerGenre} />
+            <BrowseTab key={serverKind} api={api} kind={serverKind === 'series' || serverKind === 'anime' ? 'series' : 'movie'} group={serverKind === 'anime' || serverKind === 'animation' ? serverKind : undefined} genre={serverGenre} onGenre={setServerGenre} />
           </>
         ) : (
           <p className="px-8 pt-16 text-center text-sm text-zinc-500">No server added yet. Open Settings → My servers, or turn on Extensions.</p>

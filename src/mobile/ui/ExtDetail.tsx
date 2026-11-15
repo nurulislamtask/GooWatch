@@ -11,6 +11,7 @@ import { useRatings } from '../../services/ratings';
 import { RatingBadge } from './RatingBadge';
 import { isExtSaved, toggleExtSaved, useExtSaved } from '../../extensions/library';
 import { ParsedFtpItem } from '../../utils/ftpParser';
+import { displayTitle } from '../../utils/titleClean';
 import { addonSubtitles, buildExtItem, guideFromVideos } from '../../extensions/play';
 
 interface Target {
@@ -24,7 +25,9 @@ export const ExtDetail: React.FC<{
   preview: ExtPreview;
   onClose: () => void;
   onPlay: (item: ParsedFtpItem) => void;
-}> = ({ preview, onClose, onPlay }) => {
+  library?: ParsedFtpItem[];
+  onOpenLibrary?: (item: ParsedFtpItem) => void;
+}> = ({ preview, onClose, onPlay, library = [], onOpenLibrary }) => {
   const exts = useExtensions();
   const [meta, setMeta] = useState<ExtMeta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -129,7 +132,14 @@ export const ExtDetail: React.FC<{
     if (episodic) {
       const first = nextUp?.v || eps[0] || videos[0];
       if (first) pickStreams({ videoId: first.id, season: first.season ?? 1, episode: first.episode ?? first.number, epTitle: first.title || first.name });
-    } else pickStreams({ videoId: preview.id });
+    } else if (mine.length > 0 && onOpenLibrary) {
+      onClose();
+      onOpenLibrary(mine[0]);
+    } else {
+      const b = streams.find((x) => x.playable && x.url);
+      if (b) void start(b, target || { videoId: preview.id });
+      else document.getElementById('gw-sources')?.scrollIntoView({ behavior: 'smooth' });
+    }
   };
 
   const start = async (s: ResolvedStream, forTarget?: Target) => {
@@ -143,7 +153,7 @@ export const ExtDetail: React.FC<{
     const title = meta?.name || preview.name;
     const isEp = tg.episode !== undefined;
     const year = parseInt(String(meta?.year || meta?.releaseInfo || preview.year || ''), 10) || undefined;
-    setTarget(null);
+    if (episodic) setTarget(null);
     // subtitles from add-ons must never hold the movie back: wait a moment at most
     const extra = await Promise.race([addonSubtitles(preview.type, tg.videoId), new Promise<{ url: string; label: string }[]>((r) => setTimeout(() => r([]), 600))]).catch(() => []);
     onPlay(
@@ -173,144 +183,41 @@ export const ExtDetail: React.FC<{
     true
   );
 
-  return (
-    <div className="fixed inset-0 z-[230] overflow-y-auto bg-[#07080C]">
-      <div className="relative h-[42vh] min-h-[260px] md:h-[46vh]">
-        {bg && <img src={bg} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#07080C] via-[#07080C]/50 to-black/30" />
-        <button onClick={onClose} aria-label="Back" className="absolute left-3 rounded-full bg-black/50 p-2.5 backdrop-blur active:scale-90" style={{ top: 'max(12px, env(safe-area-inset-top))' }}>
-          <ArrowLeft className="h-5 w-5 text-white" />
-        </button>
-      </div>
+  // the same title on your own servers: always listed first
+  const mine = useMemo(() => {
+    const norm = (x: string) => displayTitle(x).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const want = norm(meta?.name || preview.name);
+    if (!want || want.length < 2) return [] as ParsedFtpItem[];
+    const yr = parseInt(String(meta?.year || meta?.releaseInfo || preview.year || ''), 10) || 0;
+    const kind = preview.type === 'movie' ? 'movie' : 'series';
+    return library
+      .filter((i) => i.mediaKind === kind && norm(i.cleanTitle || i.rawName) === want && (!yr || !i.year || Math.abs(Number(i.year) - yr) <= 1))
+      .slice(0, 6);
+  }, [library, meta, preview]);
 
-      <div className="relative z-10 -mt-20 px-4 pb-10 md:px-10">
-        <div className="flex gap-4">
-          {(meta?.poster || preview.poster) && (
-            <img src={meta?.poster || preview.poster} alt="" className="h-40 w-[107px] shrink-0 rounded-xl object-cover ring-1 ring-white/10 md:h-56 md:w-[150px]" />
-          )}
-          <div className="min-w-0 self-end">
-            <h1 className="text-[22px] font-extrabold leading-tight text-white md:text-4xl">{meta?.name || preview.name}</h1>
-            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-zinc-300">
-              {(meta?.releaseInfo || meta?.year || preview.year) && <span>{meta?.releaseInfo || meta?.year || preview.year}</span>}
-              <RatingBadge r={rated} big />
-              {meta?.runtime && <span>{meta.runtime}</span>}
-              <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10.5px] uppercase">{preview.type}</span>
-            </div>
-            {meta?.genres && <p className="mt-1.5 text-[12px] text-zinc-400">{meta.genres.slice(0, 4).join(' · ')}</p>}
-          </div>
-        </div>
+  // movies: the sources appear by themselves, below the details (no extra tap)
+  useEffect(() => {
+    if (loading || episodic || target || streams.length > 0) return;
+    pickStreams({ videoId: preview.id });
+  }, [loading, episodic]);
 
-        <button
-          onClick={playMain}
-          disabled={loading}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-[15px] font-bold text-black active:scale-[0.98] disabled:opacity-60 md:max-w-sm"
-        >
-          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-black" />}
-          {episodic
-            ? nextUp
-              ? `${nextUp.kind === 'continue' ? 'Continue' : 'Next:'} S${String(nextUp.v.season ?? 1).padStart(2, '0')}E${String(nextUp.v.episode ?? nextUp.v.number ?? 0).padStart(2, '0')}`
-              : 'Play first episode'
-            : 'Play'}
-        </button>
-        <button
-          onClick={() => toggleExtSaved({ ...preview, poster: meta?.poster || preview.poster, background: meta?.background || preview.background, name: meta?.name || preview.name })}
-          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-2.5 text-[14px] font-semibold text-white active:scale-[0.98] md:max-w-sm"
-        >
-          {saved ? <BookmarkCheck className="h-5 w-5 text-amber-400" /> : <Bookmark className="h-5 w-5" />}
-          {saved ? 'In My List' : 'Add to My List'}
-        </button>
-
-        {loading && <p className="mt-4 text-sm text-zinc-500">Loading details…</p>}
-        {!loading && !meta && <p className="mt-4 text-sm text-red-300">No extension could give details for this title. You can still try Play.</p>}
-        {meta?.description && <p className="mt-4 max-w-3xl text-[13.5px] leading-relaxed text-zinc-300">{meta.description}</p>}
-        {meta?.cast && meta.cast.length > 0 && (
-          <p className="mt-3 text-[12.5px] text-zinc-400">
-            <span className="text-zinc-500">Starring: </span>
-            {meta.cast.slice(0, 5).join(', ')}
-          </p>
-        )}
-
-        {episodic && (
-          <section className="mt-6">
-            <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
-              {seasons.map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setSeason(n)}
-                  className={`shrink-0 rounded-full px-5 py-2 text-[14px] font-bold ${season === n ? 'bg-amber-400 text-black' : 'text-zinc-400 active:bg-white/10'}`}
-                >
-                  {n === 0 ? 'Specials' : `Season ${n}`}
-                </button>
-              ))}
-            </div>
-            <div className="mt-3 grid gap-3 lg:grid-cols-2">
-              {eps.map((v: ExtVideo) => {
-                const num = v.episode ?? v.number;
-                const rp = resumeMap[`ext:${v.id}`];
-                const pctSeen = rp && rp.d > 0 ? Math.min(100, Math.max(3, (rp.t / rp.d) * 100)) : rp ? 5 : 0;
-                const watched = !rp && !!goneMap[`ext:${v.id}`];
-                const gi = guide?.[`S${v.season ?? 1}E${num}`];
-                const story = (v.overview || gi?.summary || '').trim();
-                const score = gi?.rating;
-                const when = v.released || gi?.airdate;
-                const img = v.thumbnail || gi?.image || meta?.background;
-                return (
-                  <button
-                    key={v.id}
-                    onClick={() => pickStreams({ videoId: v.id, season: v.season ?? 1, episode: num, epTitle: v.title || v.name })}
-                    className="flex gap-3.5 rounded-2xl bg-[#0F121A] p-2.5 text-left ring-1 ring-white/[0.05] active:bg-white/10"
-                  >
-                    <div className="relative aspect-video w-[38%] max-w-[190px] shrink-0 self-start overflow-hidden rounded-xl bg-black/40">
-                      {img && <img src={img} alt="" loading="lazy" className="h-full w-full object-cover" />}
-                      {num !== undefined && <span className="absolute right-0 top-0 rounded-bl-xl bg-black/80 px-2.5 py-1 text-[13px] font-extrabold text-white">{num}</span>}
-                      {pctSeen > 0 && (
-                        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
-                          <div className="h-full bg-amber-400" style={{ width: `${pctSeen}%` }} />
-                        </div>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="line-clamp-2 text-[14px] font-extrabold leading-tight text-white">{v.title || v.name || `Episode ${num ?? ''}`}</p>
-                        {when && <span className="shrink-0 pt-0.5 text-[11px] text-zinc-400">{new Date(when).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        {score && <span className="rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-extrabold text-amber-300">★ {score}</span>}
-                        {(rp || watched) && (
-                          <span className="text-[11px] font-bold text-amber-300">{watched ? '✓ Watched' : `Watched ${fmtTime(rp.t)}${rp.d > 0 ? ` of ${fmtTime(rp.d)}` : ''}`}</span>
-                        )}
-                      </div>
-                      {story && <p className="mt-1.5 line-clamp-3 text-[12px] leading-snug text-zinc-400">{story}</p>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
-      </div>
-
-      {target && (
-        <div className="fixed inset-0 z-[240] flex items-end bg-black/60 md:items-center md:justify-center" onClick={() => { seq.current++; setTarget(null); }}>
-          <div
-            className="max-h-[78vh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl bg-[#10131B] p-4 md:max-w-xl md:rounded-3xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <div className="min-w-0">
-                <h3 className="text-[16px] font-bold text-white">Choose a stream</h3>
-                <p className="truncate text-[12px] text-zinc-500">
-                  {target.episode !== undefined ? `S${target.season ?? 1}E${target.episode} ${target.epTitle || ''}` : meta?.name || preview.name}
-                </p>
-              </div>
-              <button onClick={() => { seq.current++; setTarget(null); }} aria-label="Close" className="rounded-full p-2 active:bg-white/10">
-                <X className="h-5 w-5 text-zinc-300" />
-              </button>
-            </div>
+  const [tab, setTab] = useState('all');
+  const addonNames = useMemo(() => [...new Set(streams.filter((s) => s.playable || s.external).map((s) => s.addon))], [streams]);
+  const sourcesBody = (
+    <>
             {pending > 0 && (
               <p className="flex items-center gap-2 pb-2 text-[12px] text-zinc-400">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking {pending} extension{pending === 1 ? '' : 's'}…
               </p>
+            )}
+            {addonNames.length > 1 && (
+              <div className="-mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1" style={{ scrollbarWidth: 'none' }}>
+                {['all', ...addonNames].map((n) => (
+                  <button key={n} onClick={() => setTab(n)} className={`shrink-0 rounded-full px-4 py-2 text-[13px] font-bold ${tab === n ? 'bg-blue-600 text-white' : 'text-zinc-400 active:bg-white/10'}`}>
+                    {n === 'all' ? 'All' : n}
+                  </button>
+                ))}
+              </div>
             )}
             {streams.some((s) => s.playable && s.url) && (
               <button
@@ -324,8 +231,9 @@ export const ExtDetail: React.FC<{
               </button>
             )}
             {(() => {
-              const playable = streams.filter((s) => s.playable || s.external);
-              const torrents = streams.filter((s) => !s.playable && !s.external);
+              const shownStreams = tab === 'all' ? streams : streams.filter((s) => s.addon === tab);
+              const playable = shownStreams.filter((s) => s.playable || s.external);
+              const torrents = shownStreams.filter((s) => !s.playable && !s.external);
               const row = (s: ResolvedStream) => (
                 <button
                   key={s.key}
@@ -406,6 +314,186 @@ export const ExtDetail: React.FC<{
                 No stream found. Add an extension that provides streams (Settings → Extensions), then try again.
               </p>
             )}
+    </>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[230] overflow-y-auto bg-[#07080C]">
+      <div className="relative h-[42vh] min-h-[260px] md:h-[46vh]">
+        {bg && <img src={bg} alt="" className="absolute inset-0 h-full w-full object-cover opacity-70" />}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07080C] via-[#07080C]/50 to-black/30" />
+        <button onClick={onClose} aria-label="Back" className="absolute left-3 rounded-full bg-black/50 p-2.5 backdrop-blur active:scale-90" style={{ top: 'max(12px, env(safe-area-inset-top))' }}>
+          <ArrowLeft className="h-5 w-5 text-white" />
+        </button>
+      </div>
+
+      <div className="relative z-10 -mt-20 px-4 pb-10 md:px-10">
+        <div className="flex gap-4">
+          {(meta?.poster || preview.poster) && (
+            <img src={meta?.poster || preview.poster} alt="" className="h-40 w-[107px] shrink-0 rounded-xl object-cover ring-1 ring-white/10 md:h-56 md:w-[150px]" />
+          )}
+          <div className="min-w-0 self-end">
+            <h1 className="text-[22px] font-extrabold leading-tight text-white md:text-4xl">{meta?.name || preview.name}</h1>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-zinc-300">
+              {(meta?.releaseInfo || meta?.year || preview.year) && <span>{meta?.releaseInfo || meta?.year || preview.year}</span>}
+              <RatingBadge r={rated} big />
+              {meta?.runtime && <span>{meta.runtime}</span>}
+              <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10.5px] uppercase">{preview.type}</span>
+            </div>
+            {meta?.genres && <p className="mt-1.5 text-[12px] text-zinc-400">{meta.genres.slice(0, 4).join(' · ')}</p>}
+          </div>
+        </div>
+
+        <button
+          onClick={playMain}
+          disabled={loading}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 py-3 text-[15px] font-bold text-black active:scale-[0.98] disabled:opacity-60 md:max-w-sm"
+        >
+          {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5 fill-black" />}
+          {episodic
+            ? nextUp
+              ? `${nextUp.kind === 'continue' ? 'Continue' : 'Next:'} S${String(nextUp.v.season ?? 1).padStart(2, '0')}E${String(nextUp.v.episode ?? nextUp.v.number ?? 0).padStart(2, '0')}`
+              : 'Play first episode'
+            : 'Play'}
+        </button>
+        <button
+          onClick={() => toggleExtSaved({ ...preview, poster: meta?.poster || preview.poster, background: meta?.background || preview.background, name: meta?.name || preview.name })}
+          className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-white/10 py-2.5 text-[14px] font-semibold text-white active:scale-[0.98] md:max-w-sm"
+        >
+          {saved ? <BookmarkCheck className="h-5 w-5 text-amber-400" /> : <Bookmark className="h-5 w-5" />}
+          {saved ? 'In My List' : 'Add to My List'}
+        </button>
+
+        {loading && <p className="mt-4 text-sm text-zinc-500">Loading details…</p>}
+        {!loading && !meta && <p className="mt-4 text-sm text-red-300">No extension could give details for this title. You can still try Play.</p>}
+        {meta?.description && <p className="mt-4 max-w-3xl text-[13.5px] leading-relaxed text-zinc-300">{meta.description}</p>}
+        {meta?.cast && meta.cast.length > 0 && (
+          <p className="mt-3 text-[12.5px] text-zinc-400">
+            <span className="text-zinc-500">Starring: </span>
+            {meta.cast.slice(0, 5).join(', ')}
+          </p>
+        )}
+
+        {!episodic && !loading && (
+          <section id="gw-sources" className="mt-6 md:max-w-2xl">
+            <h3 className="mb-3 text-[16px] font-extrabold text-white">Sources</h3>
+            {mine.length > 0 && (
+              <div className="mb-3">
+                <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-400">My server</p>
+                {mine.map((i) => (
+                  <button
+                    key={i.id}
+                    onClick={() => {
+                      onClose();
+                      onOpenLibrary?.(i);
+                    }}
+                    className="mb-2 flex w-full min-w-0 items-start gap-3 rounded-xl bg-emerald-500/10 p-3 text-left ring-1 ring-emerald-400/30 active:bg-emerald-500/20"
+                  >
+                    <Play className="mt-0.5 h-4 w-4 shrink-0 fill-emerald-400 text-emerald-400" />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-[13px] font-semibold leading-snug text-white [overflow-wrap:anywhere]">{i.rawName}</p>
+                      <p className="mt-0.5 text-[10.5px] text-zinc-400">{i.sourceServerName || 'My server'}{i.quality ? ` · ${i.quality}` : ''}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {sourcesBody}
+          </section>
+        )}
+        {episodic && mine.length > 0 && (
+          <button
+            onClick={() => {
+              onClose();
+              onOpenLibrary?.(mine[0]);
+            }}
+            className="mt-5 flex w-full min-w-0 items-center gap-3 rounded-xl bg-emerald-500/10 p-3 text-left ring-1 ring-emerald-400/30 active:bg-emerald-500/20 md:max-w-2xl"
+          >
+            <Play className="h-4 w-4 shrink-0 fill-emerald-400 text-emerald-400" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">On my server</p>
+              <p className="truncate text-[13px] font-semibold text-white">{mine[0].cleanTitle || mine[0].rawName} · {mine[0].sourceServerName}</p>
+            </div>
+          </button>
+        )}
+        {episodic && (
+          <section className="mt-6">
+            <div className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+              {seasons.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setSeason(n)}
+                  className={`shrink-0 rounded-full px-5 py-2 text-[14px] font-bold ${season === n ? 'bg-amber-400 text-black' : 'text-zinc-400 active:bg-white/10'}`}
+                >
+                  {n === 0 ? 'Specials' : `Season ${n}`}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
+              {eps.map((v: ExtVideo) => {
+                const num = v.episode ?? v.number;
+                const rp = resumeMap[`ext:${v.id}`];
+                const pctSeen = rp && rp.d > 0 ? Math.min(100, Math.max(3, (rp.t / rp.d) * 100)) : rp ? 5 : 0;
+                const watched = !rp && !!goneMap[`ext:${v.id}`];
+                const gi = guide?.[`S${v.season ?? 1}E${num}`];
+                const story = (v.overview || gi?.summary || '').trim();
+                const score = gi?.rating;
+                const when = v.released || gi?.airdate;
+                const img = v.thumbnail || gi?.image || meta?.background;
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => pickStreams({ videoId: v.id, season: v.season ?? 1, episode: num, epTitle: v.title || v.name })}
+                    className="flex gap-3.5 rounded-2xl bg-[#0F121A] p-2.5 text-left ring-1 ring-white/[0.05] active:bg-white/10"
+                  >
+                    <div className="relative aspect-video w-[38%] max-w-[190px] shrink-0 self-start overflow-hidden rounded-xl bg-black/40">
+                      {img && <img src={img} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                      {num !== undefined && <span className="absolute right-0 top-0 rounded-bl-xl bg-black/80 px-2.5 py-1 text-[13px] font-extrabold text-white">{num}</span>}
+                      {pctSeen > 0 && (
+                        <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
+                          <div className="h-full bg-amber-400" style={{ width: `${pctSeen}%` }} />
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="line-clamp-2 text-[14px] font-extrabold leading-tight text-white">{v.title || v.name || `Episode ${num ?? ''}`}</p>
+                        {when && <span className="shrink-0 pt-0.5 text-[11px] text-zinc-400">{new Date(when).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {score && <span className="rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-extrabold text-amber-300">★ {score}</span>}
+                        {(rp || watched) && (
+                          <span className="text-[11px] font-bold text-amber-300">{watched ? '✓ Watched' : `Watched ${fmtTime(rp.t)}${rp.d > 0 ? ` of ${fmtTime(rp.d)}` : ''}`}</span>
+                        )}
+                      </div>
+                      {story && <p className="mt-1.5 line-clamp-3 text-[12px] leading-snug text-zinc-400">{story}</p>}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+        )}
+      </div>
+
+      {target && episodic && (
+        <div className="fixed inset-0 z-[240] flex items-end bg-black/60 md:items-center md:justify-center" onClick={() => { seq.current++; setTarget(null); }}>
+          <div
+            className="max-h-[78vh] w-full overflow-y-auto overflow-x-hidden rounded-t-3xl bg-[#10131B] p-4 md:max-w-xl md:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center justify-between">
+              <div className="min-w-0">
+                <h3 className="text-[16px] font-bold text-white">Choose a stream</h3>
+                <p className="truncate text-[12px] text-zinc-500">
+                  {target.episode !== undefined ? `S${target.season ?? 1}E${target.episode} ${target.epTitle || ''}` : meta?.name || preview.name}
+                </p>
+              </div>
+              <button onClick={() => { seq.current++; setTarget(null); }} aria-label="Close" className="rounded-full p-2 active:bg-white/10">
+                <X className="h-5 w-5 text-zinc-300" />
+              </button>
+            </div>
+            {sourcesBody}
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@
 // Merge rule: for every title the newest change wins (finished / removed titles are remembered so they do not come back).
 import { useEffect, useState } from 'react';
 import { request } from '../extensions/http';
+import { applySyncedExtensions, getExtensions, readAddonStamps } from '../extensions/store';
 import { deviceLabel, readGone, readResume, ResumeMap, writeResumeAndGone } from '../mobile/resume';
 
 const CFG_KEY = 'gw_sync_v1';
@@ -30,6 +31,7 @@ interface Doc {
   recent: RecentLite[];
   watch: ListDoc;
   ext: ListDoc;
+  addons?: Record<string, { u: number; del?: 1; e?: any }>;
   dev: Record<string, { n: string; u: number }>;
 }
 export interface SyncCfg {
@@ -110,6 +112,29 @@ function listDoc(store: StoreName, items: any[]): ListDoc {
   return out;
 }
 
+function addonDoc(): NonNullable<Doc['addons']> {
+  const out: NonNullable<Doc['addons']> = {};
+  const st = readAddonStamps();
+  const list = getExtensions();
+  for (const e of list) {
+    if (st[e.base]?.del) continue;
+    if (st[e.base]) out[e.base] = { u: st[e.base].u, e };
+    else if (!e.builtin) out[e.base] = { u: 1, e }; // add-ons that existed before sync: older than any later change
+  }
+  for (const [b, v] of Object.entries(st)) if (v.del) out[b] = { u: v.u, del: 1 };
+  return out;
+}
+
+function mergeAddons(a: Doc['addons'], b: Doc['addons']): NonNullable<Doc['addons']> {
+  const out: NonNullable<Doc['addons']> = {};
+  for (const k of new Set([...Object.keys(a || {}), ...Object.keys(b || {})])) {
+    const x = a?.[k];
+    const y = b?.[k];
+    out[k] = !x ? y! : !y ? x : y.u > x.u ? y : x;
+  }
+  return out;
+}
+
 function localDoc(): Doc {
   const recentFull = readJson<any[]>(RECENT_KEY, []);
   const recent: RecentLite[] = recentFull.slice(0, 20).map((r, i) => ({
@@ -125,6 +150,7 @@ function localDoc(): Doc {
     recent,
     watch: listDoc('watch', readJson<any[]>(WATCH_KEY, [])),
     ext: listDoc('ext', readJson<any[]>(EXT_KEY, [])),
+    addons: addonDoc(),
     dev: {},
   };
 }
@@ -165,10 +191,10 @@ function merge(l: Doc, r: Doc): Doc {
     if (!cur || x.at > cur.at) rec.set(x.id, x);
   }
   const recent = [...rec.values()].sort((a, b) => b.at - a.at).slice(0, 30);
-  return { v: 1, resume, gone, recent, watch: mergeLists(l.watch, r.watch), ext: mergeLists(l.ext, r.ext), dev: { ...(r.dev || {}), ...(l.dev || {}) } };
+  return { v: 1, resume, gone, recent, watch: mergeLists(l.watch, r.watch), ext: mergeLists(l.ext, r.ext), addons: mergeAddons(l.addons, r.addons), dev: { ...(r.dev || {}), ...(l.dev || {}) } };
 }
 
-const core = (d: Doc) => JSON.stringify({ r: d.resume, g: d.gone, c: d.recent.map((x) => [x.id, x.at]), w: Object.entries(d.watch).map(([k, v]) => [k, v.u, v.del || 0]).sort(), e: Object.entries(d.ext).map(([k, v]) => [k, v.u, v.del || 0]).sort() });
+const core = (d: Doc) => JSON.stringify({ r: d.resume, g: d.gone, c: d.recent.map((x) => [x.id, x.at]), w: Object.entries(d.watch).map(([k, v]) => [k, v.u, v.del || 0]).sort(), e: Object.entries(d.ext).map(([k, v]) => [k, v.u, v.del || 0]).sort(), a: Object.entries(d.addons || {}).map(([k, v]) => [k, v.u, v.del || 0]).sort() });
 
 function activeItems(l: ListDoc): { id: string; u: number; item: any }[] {
   return Object.entries(l)
@@ -179,6 +205,22 @@ function activeItems(l: ListDoc): { id: string; u: number; item: any }[] {
 
 /** Writes the merged result into this device's own storage and tells the screens to refresh. */
 function applyLocal(m: Doc) {
+  // add-ons: the newest change of each add-on wins (install / remove / enable on any device)
+  if (m.addons) {
+    const mine = readAddonStamps();
+    const cur = getExtensions();
+    const next = new Map(cur.map((e) => [e.base, e] as const));
+    const stamps = { ...mine };
+    let changed = false;
+    for (const [b, v] of Object.entries(m.addons)) {
+      if ((mine[b]?.u || 0) >= v.u) continue;
+      stamps[b] = v.del ? { u: v.u, del: 1 } : { u: v.u };
+      if (v.del) next.delete(b);
+      else if (v.e && v.e.manifest) next.set(b, v.e);
+      changed = true;
+    }
+    if (changed) applySyncedExtensions([...next.values()], stamps);
+  }
   writeResumeAndGone({ ...m.resume }, { ...m.gone });
 
   // Continue watching entries

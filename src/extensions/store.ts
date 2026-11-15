@@ -61,15 +61,62 @@ function load(): InstalledExt[] {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       state = JSON.parse(raw) as InstalledExt[];
+      prevSnap = snapOf(state);
       return state;
     }
   } catch {
     /* ignore */
   }
   state = [];
+  prevSnap = new Map();
   return state;
 }
+const STAMP_KEY = 'gw_addon_stamps_v1';
+type AddonStamp = { u: number; del?: 1 };
+export function readAddonStamps(): Record<string, AddonStamp> {
+  try {
+    return JSON.parse(localStorage.getItem(STAMP_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+let prevSnap: Map<string, string> | null = null;
+const snapOf = (l: InstalledExt[]) => new Map(l.map((e) => [e.base, JSON.stringify(e)] as const));
+/** Remembers WHICH add-on changed and when, so devices can merge their add-on lists (install on the phone -> appears on the PC). */
+function stampChanges(next: InstalledExt[]) {
+  const now = Date.now();
+  const cur = snapOf(next);
+  if (prevSnap) {
+    const st = readAddonStamps();
+    let ch = false;
+    for (const [b, j] of cur) if (prevSnap.get(b) !== j && !JSON.parse(j).builtin) { st[b] = { u: now }; ch = true; }
+    for (const b of prevSnap.keys()) if (!cur.has(b)) { st[b] = { u: now, del: 1 }; ch = true; }
+    if (ch) {
+      try {
+        localStorage.setItem(STAMP_KEY, JSON.stringify(st));
+      } catch {
+        /* ignore */
+      }
+      window.dispatchEvent(new Event('gw:sync-soon'));
+    }
+  }
+  prevSnap = cur;
+}
+/** Used by sync: puts the merged add-on list in place without stamping it as a local change. */
+export function applySyncedExtensions(list: InstalledExt[], stamps: Record<string, AddonStamp>) {
+  state = list;
+  prevSnap = snapOf(list);
+  try {
+    localStorage.setItem(KEY, JSON.stringify(list));
+    localStorage.setItem(STAMP_KEY, JSON.stringify(stamps));
+  } catch {
+    /* ignore */
+  }
+  listeners.forEach((l) => l());
+}
+
 function save() {
+  stampChanges(state || []);
   state = [...(state || [])]; // new array: screens that depend on the list re-render (installed badges, rows)
   try {
     localStorage.setItem(KEY, JSON.stringify(state || []));

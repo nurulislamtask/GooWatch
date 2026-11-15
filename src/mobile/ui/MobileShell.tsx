@@ -176,6 +176,8 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
           preview={ext}
           onClose={() => setExt(null)}
           onPlay={(it) => props.onPlayDirect(it)}
+          library={lib.items}
+          onOpenLibrary={(i) => api.openDetails(i)}
         />
       )}
 

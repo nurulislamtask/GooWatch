@@ -35,7 +35,7 @@ export function langOf(name?: string): string {
 }
 
 /** Movies / Series: filter by language and category, sort, and an endless grid. */
-export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genre?: string; onGenre?: (g: string) => void }> = ({ api, kind, genre = '', onGenre }) => {
+export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; group?: 'anime' | 'animation'; genre?: string; onGenre?: (g: string) => void }> = ({ api, kind, group, genre = '', onGenre }) => {
   const [source, setSource] = useState('all');
   const [filter, setFilter] = useState<FilterState>(NO_FILTER);
   const [genreLocal, setGenreLocal] = useState(genre);
@@ -51,7 +51,17 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
   const mode = useContentMode();
   const sentinel = useRef<HTMLDivElement>(null);
 
-  const all = useMemo(() => api.library.filter((i) => i.mediaKind === kind && allowLibraryItem(i, mode)), [api.library, kind, mode]);
+  const all = useMemo(
+    () =>
+      api.library.filter((i) => {
+        if (!allowLibraryItem(i, mode)) return false;
+        const sn = (i.sourceServerName || '').toLowerCase();
+        if (group === 'anime') return /anime/.test(sn);
+        if (group === 'animation') return /animation|cartoon/.test(sn) && !/anime/.test(sn);
+        return i.mediaKind === kind;
+      }),
+    [api.library, kind, mode, group]
+  );
   const sourceNames = useMemo(() => {
     const m = new Map<string, number>();
     all.forEach((i) => m.set(langOf(i.sourceServerName), (m.get(langOf(i.sourceServerName)) || 0) + 1));
@@ -65,7 +75,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
     if (!needLookup) return;
     let alive = true;
     let n = 0;
-    const base = (source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source)).slice(0, 400);
+    const base = (source === 'all' ? all : all.filter((i) => langOf(i.sourceServerName) === source)).slice(0, 1200);
     base.forEach((i) =>
       ensureRating(target(i)).then(() => {
         if (alive && ++n % 10 === 0) setLookTick((x) => x + 1);
@@ -136,7 +146,7 @@ export const BrowseTab: React.FC<{ api: ShellApi; kind: 'movie' | 'series'; genr
       <div className="sticky top-0 z-20 bg-[#07080C]/95 pb-2 pt-3 backdrop-blur">
         <div className="flex items-center justify-between px-4 md:px-6">
           <div>
-            <h1 className="text-[22px] font-extrabold tracking-tight text-white">{kind === 'movie' ? 'Movies' : 'Series'}</h1>
+            <h1 className="text-[22px] font-extrabold tracking-tight text-white">{group === 'anime' ? 'Anime' : group === 'animation' ? 'Animation' : kind === 'movie' ? 'Movies' : 'Series'}</h1>
             <p className="text-[11px] text-zinc-500">{list.length.toLocaleString()} titles</p>
           </div>
           <button onClick={api.openSearch} aria-label="Search" className="rounded-full bg-white/[0.07] p-2.5 active:scale-90">

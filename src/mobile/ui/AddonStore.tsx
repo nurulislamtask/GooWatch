@@ -74,8 +74,8 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
     return (all || [])
-      .filter((a) => matches(a, filter) && (showDebrid || (!a.needsDebrid && !a.needsSetup)) && (!t || (a.name + ' ' + a.description).toLowerCase().includes(t)))
-      .sort((a, b) => Number(a.needsDebrid || a.needsSetup) - Number(b.needsDebrid || b.needsSetup) || Number(b.resources.includes('stream')) - Number(a.resources.includes('stream')));
+      .filter((a) => matches(a, filter) && (showDebrid || !!t || (!a.needsDebrid && !a.needsSetup)) && (!t || (a.name + ' ' + a.description + ' ' + a.id + ' ' + a.manifestUrl + ' ' + (a.types || []).join(' ')).toLowerCase().includes(t)))
+        .sort((a, b) => (t ? Number(b.name.toLowerCase().startsWith(t)) - Number(a.name.toLowerCase().startsWith(t)) : 0) || Number(a.needsDebrid || a.needsSetup) - Number(b.needsDebrid || b.needsSetup) || Number(b.resources.includes('stream')) - Number(a.resources.includes('stream')));
   }, [all, q, filter, showDebrid]);
 
   const Btn: React.FC<{ name: string; url: string; manifest?: any; setup?: boolean }> = ({ name, url, manifest, setup }) =>
@@ -181,6 +181,14 @@ export const AddonStore: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         )}
         {err && <p className="mt-4 rounded-xl bg-white/5 p-3 text-[13px] text-zinc-400">{err}</p>}
 
+        {/^(https?|stremio):\/\//i.test(q.trim()) && (
+          <button onClick={() => install('Add-on', q.trim())} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-amber-400 py-3 text-[14px] font-extrabold text-black active:scale-[0.98]">
+            <Download className="h-4 w-4" /> Install this address
+          </button>
+        )}
+        {q.trim() && all && list.length === 0 && !/^(https?|stremio):\/\//i.test(q.trim()) && (
+          <p className="mt-3 rounded-xl bg-white/5 p-3 text-[13px] text-zinc-400">No add-on named “{q.trim()}” in the list. If you have its address (…/manifest.json), paste it here to install it.</p>
+        )}
         <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
           {list.map((a) => (
             <div key={a.id} className="flex min-w-0 items-center gap-3 rounded-2xl bg-[#0F121A] p-3.5 ring-1 ring-white/[0.06]">
