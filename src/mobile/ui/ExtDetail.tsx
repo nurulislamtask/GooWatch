@@ -1,4 +1,5 @@
 import { useContentMode } from '../safety';
+import { useGuide } from '../episodeGuide';
 import { fmtTime, readGone, readResume } from '../resume';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bookmark, BookmarkCheck, ExternalLink, Loader2, Play, X } from 'lucide-react';
@@ -106,6 +107,7 @@ export const ExtDetail: React.FC<{
     setHintOff(true);
   };
   const mode = useContentMode();
+  const guide = useGuide(meta?.name || preview.name);
   const resumeMap = useMemo(() => readResume(), [meta, target]);
   const goneMap = useMemo(() => readGone(), [meta, target]);
 
@@ -217,48 +219,50 @@ export const ExtDetail: React.FC<{
                 <button
                   key={n}
                   onClick={() => setSeason(n)}
-                  className={`shrink-0 rounded-full px-4 py-1.5 text-[13px] font-semibold ${season === n ? 'bg-amber-400 text-black' : 'bg-white/10 text-zinc-200'}`}
+                  className={`shrink-0 rounded-full px-5 py-2 text-[14px] font-bold ${season === n ? 'bg-amber-400 text-black' : 'text-zinc-400 active:bg-white/10'}`}
                 >
                   {n === 0 ? 'Specials' : `Season ${n}`}
                 </button>
               ))}
             </div>
-            <div className="mt-2 grid gap-2 md:grid-cols-2">
+            <div className="mt-3 grid gap-3 lg:grid-cols-2">
               {eps.map((v: ExtVideo) => {
                 const num = v.episode ?? v.number;
                 const rp = resumeMap[`ext:${v.id}`];
                 const pctSeen = rp && rp.d > 0 ? Math.min(100, Math.max(3, (rp.t / rp.d) * 100)) : rp ? 5 : 0;
                 const watched = !rp && !!goneMap[`ext:${v.id}`];
+                const gi = guide?.[`S${v.season ?? 1}E${num}`];
+                const story = (v.overview || gi?.summary || '').trim();
+                const score = gi?.rating;
+                const when = v.released || gi?.airdate;
+                const img = v.thumbnail || gi?.image || meta?.background;
                 return (
                   <button
                     key={v.id}
                     onClick={() => pickStreams({ videoId: v.id, season: v.season ?? 1, episode: num, epTitle: v.title || v.name })}
-                    className="flex gap-3 rounded-xl bg-[#0F121A] p-2 text-left ring-1 ring-white/[0.05] active:bg-white/10"
+                    className="flex gap-3.5 rounded-2xl bg-[#0F121A] p-2.5 text-left ring-1 ring-white/[0.05] active:bg-white/10"
                   >
-                    <div className="relative h-[68px] w-[120px] shrink-0 overflow-hidden rounded-lg bg-black/40">
-                      {(v.thumbnail || meta?.background) && <img src={v.thumbnail || meta?.background} alt="" loading="lazy" className="h-full w-full object-cover" />}
-                      <Play className="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 fill-white/90 text-white/90" />
+                    <div className="relative aspect-video w-[38%] max-w-[190px] shrink-0 self-start overflow-hidden rounded-xl bg-black/40">
+                      {img && <img src={img} alt="" loading="lazy" className="h-full w-full object-cover" />}
+                      {num !== undefined && <span className="absolute right-0 top-0 rounded-bl-xl bg-black/80 px-2.5 py-1 text-[13px] font-extrabold text-white">{num}</span>}
                       {pctSeen > 0 && (
                         <div className="absolute inset-x-0 bottom-0 h-1 bg-white/25">
                           <div className="h-full bg-amber-400" style={{ width: `${pctSeen}%` }} />
                         </div>
                       )}
                     </div>
-                    <div className="min-w-0 py-0.5">
-                      {(rp || watched) && (
-                        <p className="text-[11px] font-bold text-amber-300">
-                          {watched ? '✓ Watched' : `Watched ${fmtTime(rp.t)}${rp.d > 0 ? ` of ${fmtTime(rp.d)}` : ''}`}
-                        </p>
-                      )}
-                      <p className="truncate text-[13.5px] font-semibold text-white">
-                        {num !== undefined ? `${num}. ` : ''}
-                        {v.title || v.name || `Episode ${num ?? ''}`}
-                      </p>
-                      {(v.released || v.overview) && (
-                        <p className="mt-0.5 line-clamp-2 text-[11.5px] text-zinc-500">
-                          {v.released ? new Date(v.released).toLocaleDateString() : ''} {v.overview || ''}
-                        </p>
-                      )}
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="line-clamp-2 text-[14px] font-extrabold leading-tight text-white">{v.title || v.name || `Episode ${num ?? ''}`}</p>
+                        {when && <span className="shrink-0 pt-0.5 text-[11px] text-zinc-400">{new Date(when).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        {score && <span className="rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-extrabold text-amber-300">★ {score}</span>}
+                        {(rp || watched) && (
+                          <span className="text-[11px] font-bold text-amber-300">{watched ? '✓ Watched' : `Watched ${fmtTime(rp.t)}${rp.d > 0 ? ` of ${fmtTime(rp.d)}` : ''}`}</span>
+                        )}
+                      </div>
+                      {story && <p className="mt-1.5 line-clamp-3 text-[12px] leading-snug text-zinc-400">{story}</p>}
                     </div>
                   </button>
                 );

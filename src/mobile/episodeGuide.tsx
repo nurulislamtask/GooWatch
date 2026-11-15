@@ -8,9 +8,12 @@ import { normalizeLookupTitle } from '../utils/titleClean';
 export interface GuideEpisode {
   name: string;
   image?: string;
+  summary?: string; // short story of the episode
+  rating?: string; // 0-10 score of this episode
+  airdate?: string;
 }
 type Guide = Record<string, GuideEpisode>; // "S1E3"
-const LS = 'cineftp_guide_v1';
+const LS = 'cineftp_guide_v2';
 const mem = new Map<string, Guide | null>();
 const pending = new Map<string, Promise<Guide | null>>();
 
@@ -64,6 +67,9 @@ export function loadGuide(series: string): Promise<Guide | null> {
         g[`S${e.season}E${e.number}`] = {
           name: String(e.name || ''),
           image: e.image?.medium || e.image?.original || undefined,
+          summary: e.summary ? String(e.summary).replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&rsquo;/g, "'").trim() : undefined,
+          rating: e.rating?.average ? Number(e.rating.average).toFixed(1) : undefined,
+          airdate: e.airdate || undefined,
         };
       }
       if (Object.keys(g).length === 0) return null;

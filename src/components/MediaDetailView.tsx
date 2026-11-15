@@ -762,6 +762,8 @@ export const MediaDetailView: React.FC<MediaDetailViewProps> = ({
                               {isWatched ? '✓ Watched' : `Watched ${fmtTime(st.rp!.t)}${st.rp!.d > 0 ? ` of ${fmtTime(st.rp!.d)}` : ''}`}
                             </p>
                           )}
+                          {guide?.[`S${sNum}E${epNum}`]?.rating && <span className="inline-block rounded-md bg-amber-400/15 px-1.5 py-0.5 text-[11px] font-extrabold text-amber-300">★ {guide[`S${sNum}E${epNum}`].rating}</span>}
+                          {guide?.[`S${sNum}E${epNum}`]?.summary && <p className="line-clamp-3 text-[12px] leading-snug text-zinc-400">{guide[`S${sNum}E${epNum}`].summary}</p>}
                           <div className="text-[11px] font-mono text-zinc-500 flex items-center gap-2">
                             <span>{ep.quality || '1080p'}</span>
                             <span>·</span>

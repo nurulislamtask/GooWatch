@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Search, X } from 'lucide-react';
+import { ArrowLeft, Clock, Search, X } from 'lucide-react';
 import { ShellApi } from './types';
 import { MobilePoster } from './MobilePoster';
 import { ExtPreview } from '../../extensions/types';
@@ -11,9 +11,34 @@ import { allowExt, allowExtItem, allowLibraryItem, useContentMode } from '../saf
 import { usePrefs } from '../prefs';
 import { expandQuery, titleMatches } from '../../utils/smartSearch';
 
+const HIST = 'gw_search_hist_v1';
+const readHist = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(HIST) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+const writeHist = (l: string[]) => {
+  try {
+    localStorage.setItem(HIST, JSON.stringify(l.slice(0, 12)));
+  } catch {
+    /* ignore */
+  }
+};
+
 export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = ({ api, onClose }) => {
   const [q, setQ] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const [hist, setHist] = useState<string[]>(readHist);
+  const remember = (text: string) => {
+    const t = text.trim();
+    if (t.length < 2) return;
+    const l = [t, ...readHist().filter((x) => x.toLowerCase() !== t.toLowerCase())].slice(0, 12);
+    writeHist(l);
+    setHist(l);
+  };
   const exts = useExtensions();
   const mode = useContentMode();
   const [prefs] = usePrefs();
@@ -69,6 +94,8 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
             ref={input}
             value={q}
             onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && remember(q)}
+            enterKeyHint="search"
             placeholder="Search movies & series"
             className="w-full bg-transparent py-4 text-[17px] text-white outline-none placeholder:text-zinc-500"
           />
@@ -88,6 +115,7 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
             key={it.id}
             item={it}
             onOpen={(i, m) => {
+              remember(q);
               onClose();
               api.openDetails(i, m);
             }}
@@ -101,12 +129,53 @@ export const SearchOverlay: React.FC<{ api: ShellApi; onClose: () => void }> = (
           <p className="px-4 pb-2 pt-2 text-[12px] text-zinc-500">{extBusy ? 'Searching extensions…' : `From extensions · ${extResults.length}`}</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-9 gap-x-2.5 md:gap-x-3 gap-y-4 px-3.5 md:px-6 pb-10">
             {extResults.map((it) => (
-              <ExtCard key={`${it.type}:${it.id}`} item={it} onOpen={api.openExt} className="w-full" />
+              <ExtCard key={`${it.type}:${it.id}`} item={it} onOpen={(p) => { remember(q); api.openExt(p); }} className="w-full" />
             ))}
           </div>
         </>
       )}
-      {q.trim().length < 2 && <p className="px-8 pt-20 text-center text-sm text-zinc-500">Type at least 2 letters</p>}
+      {q.trim().length < 2 &&
+        (hist.length > 0 ? (
+          <div className="px-4 pt-2">
+            <div className="flex items-center justify-between pb-2">
+              <p className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-wider text-zinc-500">
+                <Clock className="h-3.5 w-3.5" /> Recent searches
+              </p>
+              <button
+                onClick={() => {
+                  writeHist([]);
+                  setHist([]);
+                }}
+                className="text-[12px] font-semibold text-amber-400"
+              >
+                Clear all
+              </button>
+            </div>
+            <div className="divide-y divide-white/[0.05]">
+              {hist.map((h) => (
+                <div key={h} className="flex items-center">
+                  <button onClick={() => setQ(h)} className="flex min-w-0 flex-1 items-center gap-3 py-3 text-left active:opacity-70">
+                    <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+                    <span className="truncate text-[15px] text-zinc-100">{h}</span>
+                  </button>
+                  <button
+                    aria-label={`Remove ${h}`}
+                    onClick={() => {
+                      const l = hist.filter((x) => x !== h);
+                      writeHist(l);
+                      setHist(l);
+                    }}
+                    className="p-2 text-zinc-500 active:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="px-8 pt-20 text-center text-sm text-zinc-500">Type at least 2 letters</p>
+        ))}
     </div>
   );
 };
