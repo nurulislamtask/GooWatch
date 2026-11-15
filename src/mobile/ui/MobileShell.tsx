@@ -134,6 +134,7 @@ export const MobileShell: React.FC<MobileShellProps> = (props) => {
           prefs={prefs}
           setPrefs={setPrefs}
           libraryCount={lib.items.length}
+          sourceCounts={lib.items.reduce<Record<string, number>>((m, it) => { const k = it.sourceServerUrl || ''; m[k] = (m[k] || 0) + 1; return m; }, {})}
           updatedAt={lib.updatedAt}
           scanning={lib.scanning}
           progress={lib.progress}

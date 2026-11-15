@@ -34,6 +34,7 @@ interface Props {
   prefs: MobilePrefs;
   setPrefs: (p: Partial<MobilePrefs>) => void;
   libraryCount: number;
+  sourceCounts?: Record<string, number>;
   updatedAt: number;
   scanning: boolean;
   progress: string;
@@ -241,11 +242,17 @@ export const MoreTab: React.FC<Props> = (p) => {
         />
         {showSources && (
           <div className="bg-black/20">
-            {mine.length === 0 && (
-              <p className="px-4 pt-3 text-[12px] leading-relaxed text-zinc-500">
-                The ready-made English, Hindi, Bangla, South, Korean and Anime servers are already built in. Add your own FTP / server link here if you have one.
-              </p>
-            )}
+            <p className="px-4 pt-3 text-[12px] leading-relaxed text-zinc-500">
+              Built in ({p.sources.length - mine.length} servers, always loaded automatically). Add your own FTP / server link below if you have one.
+            </p>
+            {p.sources
+              .filter((x) => builtIn.has(x.id))
+              .map((s) => (
+                <div key={s.id} className="flex items-center gap-3 px-4 py-1.5">
+                  <p className="min-w-0 flex-1 truncate text-[12.5px] text-zinc-300">{s.name}</p>
+                  <span className="text-[11px] tabular-nums text-zinc-500">{(p.sourceCounts?.[s.url] || 0) > 0 ? `${p.sourceCounts![s.url]} titles` : p.scanning ? 'loading…' : 'no titles yet'}</span>
+                </div>
+              ))}
             {mine.map((s) => (
               <div key={s.id} className="flex items-center gap-3 border-b border-white/[0.04] px-4 py-3">
                 <div className="min-w-0 flex-1">
@@ -302,7 +309,11 @@ export const MoreTab: React.FC<Props> = (p) => {
           icon={<RefreshCw className={`h-5 w-5 ${p.scanning ? 'animate-spin' : ''}`} />}
           title="Refresh library now"
           hint={p.scanning ? `Updating… ${p.progress}` : `Last updated ${ago(p.updatedAt)}. It also refreshes by itself every 6 hours.`}
-          onClick={() => !p.scanning && p.onRefresh()}
+          onClick={() => {
+            if (p.scanning) return flash('Already updating…');
+            flash('Refreshing all servers…');
+            p.onRefresh();
+          }}
         />
       </Section>
 

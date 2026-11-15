@@ -64,7 +64,7 @@ export const ExtDetail: React.FC<{
     [videos, season]
   );
 
-  // Quick play: the best playable stream starts by itself a moment after the first one shows up (tap another one, or close, to stop that)
+  // The list never starts anything by itself: you choose a stream (or press "Play best").
   const seq = React.useRef(0);
   const autoOn = React.useRef(false);
   const pickStreams = (t: Target) => {
@@ -77,16 +77,6 @@ export const ExtDetail: React.FC<{
       if (seq.current !== my) return;
       setStreams(all);
       setPending(p);
-      const first = all.find((s) => s.playable && s.url);
-      if (first && !autoOn.current) {
-        autoOn.current = true;
-        window.setTimeout(() => {
-          if (seq.current !== my) return;
-          seq.current++; // nobody else may start now
-          const best = latest.current.find((s) => s.playable && s.url) || first;
-          void start(best, t);
-        }, 900);
-      }
       latest.current = all;
     });
   };
@@ -295,7 +285,17 @@ export const ExtDetail: React.FC<{
                 <Loader2 className="h-3.5 w-3.5 animate-spin" /> Asking {pending} extension{pending === 1 ? '' : 's'}…
               </p>
             )}
-            {streams.some((s) => s.playable) && <p className="pb-2 text-[11.5px] text-amber-300/90">Starting the best stream… tap another one to choose it yourself.</p>}
+            {streams.some((s) => s.playable && s.url) && (
+              <button
+                onClick={() => {
+                  const b = streams.find((s) => s.playable && s.url);
+                  if (b) void start(b, target || undefined);
+                }}
+                className="mb-2 w-full rounded-xl bg-emerald-500 py-2.5 text-[13.5px] font-black text-black active:scale-[.98]"
+              >
+                ▶ Play best stream
+              </button>
+            )}
             {(() => {
               const playable = streams.filter((s) => s.playable || s.external);
               const torrents = streams.filter((s) => !s.playable && !s.external);

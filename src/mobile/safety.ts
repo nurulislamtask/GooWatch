@@ -11,10 +11,11 @@ export type ContentMode = 'all' | 'family' | 'kids';
 const ADULT = /\b(18\s?\+|xxx|erotic|erotica|adult|uncensored|nude|porn|hentai|ullu|kamasutra|sexy|sex (tape|scene|education)|escort|stripper|bdsm)\b/i;
 const SCARY = /\b(horror|slasher|conjuring|annabelle|insidious|exorcis|purge|saw (i|ii|iii|iv|v|vi|x)\b|texas chainsaw|halloween kills|scream (vi|[2-6])|hostel|final destination)\b/i;
 const KIDS_NAME =
-  /\b(cartoons?|kids?|children|disney|pixar|dreamworks|peppa|paw patrol|doraemon|tom (and|&) jerry|mickey|barbie|lego|minions|frozen|toy story|shrek|moana|encanto|cocomelon|bluey|sesame|sponge ?bob|ben ?10|ninja hattori|shin-?chan|chhota bheem|mr\.? bean|masha|kung fu panda|madagascar|ice age|despicable me|trolls|zootopia|finding nemo|finding dory|inside out|winnie|pokemon|pok[eé]mon|ducktales|looney|scooby|smurfs|garfield|peter rabbit|paddington|hotel transylvania|puss in boots|bolt|ratatouille|wall-e|lilo|stitch|aladdin|lion king|jungle book|dumbo|bambi|cinderella|tangled|brave|luca|turning red|sing\b)\b/i;
+  /\b(cartoons?|children|kids (movie|cartoon|show|special)|disney|pixar|dreamworks|peppa|paw patrol|doraemon|tom (and|&) jerry|mickey|barbie|lego|minions|frozen|toy story|shrek|moana|encanto|cocomelon|bluey|sesame|sponge ?bob|ben ?10|ninja hattori|shin-?chan|chhota bheem|mr\.? bean|masha|kung fu panda|madagascar|ice age|despicable me|trolls|zootopia|finding nemo|finding dory|inside out|winnie|pokemon|pok[eé]mon|ducktales|looney|scooby|smurfs|garfield|peter rabbit|paddington|hotel transylvania|puss in boots|ratatouille|wall-e|lilo (and|&) stitch|aladdin|lion king|jungle book|dumbo|bambi|cinderella|tangled|turning red)\b/i;
 
 export const KIDS_GENRES = ['Animation', 'Family', 'Kids', 'Children'];
-const SCARY_GENRES = ['horror', 'thriller', 'crime', 'war', 'mystery'];
+const SCARY_GENRES = ['horror', 'thriller', 'crime', 'war', 'mystery', 'film-noir', 'reality-tv', 'talk-show', 'news'];
+const GROWNUP_GENRES = ['romance', 'drama', 'biography', 'history', 'western', 'documentary'];
 
 export function useContentMode(): ContentMode {
   const [p] = usePrefs();
@@ -37,7 +38,8 @@ export function allowLibraryItem(item: ParsedFtpItem, mode: ContentMode = curren
   // kids
   if (genres.some((g) => SCARY_GENRES.includes(g))) return false;
   if (genres.some((g) => KIDS_GENRES.map((k) => k.toLowerCase()).includes(g))) return true;
-  if (KIDS_NAME.test(text) || /kid|cartoon|animat|children/i.test(item.sourceServerName || '')) return true;
+  if (genres.some((g) => GROWNUP_GENRES.includes(g))) return false;
+  if (KIDS_NAME.test(text) || /\b(kids?|cartoons?|children)\b/i.test(item.sourceServerName || '')) return true;
   return false;
 }
 
@@ -52,6 +54,7 @@ export function allowExtItem(p: ExtPreview, mode: ContentMode = currentMode(), t
   if (mode === 'family') return true;
   if (genres.some((g) => SCARY_GENRES.includes(g))) return false;
   if (genres.some((g) => KIDS_GENRES.map((k) => k.toLowerCase()).includes(g))) return true;
+  if (genres.some((g) => GROWNUP_GENRES.includes(g))) return false;
   if (trustedGenre) return true;
   return KIDS_NAME.test(p.name);
 }
