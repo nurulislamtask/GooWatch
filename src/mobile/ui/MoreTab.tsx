@@ -24,6 +24,7 @@ import { fetchLatestRelease, isNewer } from '../../components/AppUpdatePrompt';
 import { NativePlayer } from '../nativePlayer';
 import { AboutPanel } from '../../components/AboutPanel';
 import { SyncPanel } from './SyncPanel';
+import { AccountPanel } from './AccountPanel';
 import { changeMode, checkPin } from '../safety';
 import { openAddonStore } from '../../extensions/catalog';
 import { IS_CAPACITOR } from '../../utils/platform';
@@ -192,6 +193,10 @@ export const MoreTab: React.FC<Props> = (p) => {
             <Line title="Add-on store" hint="Recommended add-ons, one tap to install" onClick={openAddonStore} right={<ChevronRight className="h-4 w-4 text-zinc-500" />} />
           </>
         )}
+      </Section>
+
+      <Section title="Account">
+        <AccountPanel />
       </Section>
 
       <Section title="Sync across devices">
